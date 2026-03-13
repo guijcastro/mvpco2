@@ -1,0 +1,799 @@
+PLANO TÉCNICO DE ARQUITETURA
+Sistema de Cliente Oculto — Varejo Ótico Premium
+Pipeline: Parsing Determinístico + Agentes LLM · Antigravity
+Projeto
+cliente-oculto (guijcastro/github)
+Stack
+Bun · Netlify · Supabase · Antigravity
+Status
+13 fases entregues · Refatoração arquitetural
+Data
+Março 2026
+1. Diagnóstico do Estado Atual
+O projeto possui fundação sólida construída em 13 fases. O problema está na camada de classificação: um único campo JSONB livre (classification_data) sem contrato entre o que o LLM produz e o que os 9 módulos de relatório tentam consumir.
+1.1 Infraestrutura Existente (Entregue)
+Componente
+Descrição
+Upload & Storage
+Áudio → Supabase Storage com metadata de loja, vendedor, data
+Transcrição
+Whisper (OpenAI) e Gemini via Netlify Functions com telemetria de custo por minuto
+Interface de Chat
+Chat multi-turn com transcrição como contexto, persona configurável, exportação TXT/JSON/CSV
+Telemetria
+Rastreamento de tokens, custo por operação, latência em usage_telemetry
+Endpoint /classify
+JSON-mode com OpenAI/Gemini, output JSONB em audio_classifications
+9 módulos de relatório
+r_qa_heatmap · r_vendas · r_oportunidades · r_atrito · r_nlp · r_comportamento · r_intencao_preditivo · r_falantes_fases · r_compliance_followup
+Autenticação
+Supabase Auth com RLS por usuário em todas as tabelas
+Settings
+Multi-provider, pricing.json editável, modelos configuráveis
+1.2 O Problema Central
+Diagnóstico: JSONB livre sem contrato de dados
+• audio_classifications.classification_data é JSONB sem schema definido
+• O LLM recebe a transcrição inteira e produz um JSON diferente a cada execução
+• Os 9 módulos de relatório tentam parsear campos que podem ou não existir
+• Resultado: relatórios genéricos, campos undefined, comparações impossíveis entre atendimentos
+• Causa raiz: não há separação entre extração determinística e julgamento semântico
+O schema real esperado pelos renderers foi mapeado diretamente do código. São 20 top-level keys com subestruturas específicas. Nenhuma delas tem garantia de existência no JSONB atual. A Seção 4 apresenta o schema completo derivado do código.
+2. Princípio Arquitetural — Divisão de Responsabilidades
+A causa dos relatórios genéricos é estrutural: o LLM está sendo usado para fazer tudo. A arquitetura correta separa o que é computável deterministicamente do que exige inferência semântica. Cada método tem seu escopo e nenhum faz o trabalho do outro.
+Regra absoluta do pipeline
+O LLM nunca recebe a transcrição inteira para analisar tudo de uma vez.
+Cada agente LLM recebe contexto mínimo e responde UMA pergunta específica com schema obrigatório.
+Tudo o que pode ser computado sem LLM, DEVE ser computado sem LLM.
+2.1 Mapa de Responsabilidades por Dimensão
+Dimensão de Análise
+Método
+Tipo
+Custo LLM
+Parsing de turnos
+Regex + heurísticas posicionais
+DETERMINÍSTICO
+Zero
+Entidades (produto, preço, marca)
+Dicionários + regex calibrados
+DETERMINÍSTICO
+Zero
+Checklist com keyword direta
+Dictionary matching por janela e role
+DETERMINÍSTICO
+Zero
+Métricas de fala
+Contagem de tokens, ratio, perguntas (?)
+DETERMINÍSTICO
+Zero
+Segmentação de fases
+Padrões de turno + entidades detectadas
+DETERMINÍSTICO
+Zero
+Checklist ambíguo (sequência, contexto)
+LLM Agente 1 — escopo cirúrgico
+LLM
+1 call/conversa
+Objeções e eficácia da resposta
+LLM Agente 2 — taxonomia fechada
+LLM
+1 call/conversa
+Intenção de compra (scoring)
+LLM Agente 3 — Chain-of-Thought
+LLM
+1 call/conversa
+Sentimento por fase
+LLM Agente 4 — por fase, não por full-text
+LLM
+1 call/fase
+Perfil psicológico
+LLM Agente 5 — arquétipos fechados
+LLM
+1 call/conversa
+Oportunidades perdidas (gap)
+LLM Agente 6 — catálogo + inferência
+LLM
+1 call/conversa
+Síntese qualitativa narrativa
+LLM Agente 7 — recebe dados, não transcrição
+LLM
+1 call/conversa
+Relatórios quantitativos
+SQL direto sobre banco estruturado
+SQL
+Zero
+3. Pipeline End-to-End — 5 Etapas
+O pipeline executa sequencialmente. As etapas E1 e E2 são totalmente determinísticas e de custo zero em LLM. As etapas E3 e E4 envolvem agentes LLM com contexto controlado. E5 persiste o resultado em schema fixo.
+E1
+Normalização da Transcrição
+Parsing puro · Zero LLM · Input: texto bruto da transcrição
+A transcrição do Whisper chega como texto corrido com marcadores informais ou sem marcadores. Esta etapa converte em array de turnos estruturados — a unidade atômica de toda análise posterior.
+Algoritmo de parsing de turnos
+Detectar padrões de marcador explícito: 'Vendedor:', 'Cliente:', 'V:', 'C:', 'Atendente:'
+Se sem marcadores: inferir por posição alternada (V, C, V, C...) com parágrafo como separador
+Normalizar texto: expandir abreviações, remover ruídos, aplicar pontuação mínima
+Output: [ { id, role: VENDEDOR|CLIENTE|TERCEIRO, text, char_start, char_end } ]
+Score de confiança do parsing
+Atribuir confidence_score ao parsing baseado na presença ou ausência de marcadores explícitos.
+Se confidence < 0.6 → flag manual_review = true no registro do áudio.
+Transcrições de baixa qualidade com role errado corrompem toda análise downstream.
+E2
+Extração Determinística
+Dicionários + Regex · Zero LLM · Input: array de turnos
+Com os turnos estruturados, executa-se varredura computacional para extrair tudo o que pode ser detectado com certeza. Esta etapa resolve a maior parte do checklist Zeiss e todas as métricas objetivas sem gastar um token sequer.
+2a — Extração de Entidades por Regex e Dicionário
+Entidade
+Padrão / Dicionário
+Escopo
+Preços / Valores
+R$\s*[\d.,]+  |  "oitocentos"  |  "mil reais"  |  padrões numerais extensos
+Todos os turnos
+Produtos Zeiss
+DriveSafe · PhotoFusion · iTerminal · Visufit · VisuConsult · Single Vision · Progressive
+Todos os turnos
+Equipamentos
+lensômetro · ultrassônico · ultrassom · iTerminal · Visufit · tablet · demotool
+Todos os turnos
+Concorrentes
+Essilor · Varilux · Hoya · Kodak · Nikon · Shamir · Seiko · Rodenstock
+Todos os turnos
+Perguntas do vendedor
+Turnos do VENDEDOR terminando em '?' com ≥ 5 palavras → open question
+Turnos VENDEDOR
+Ratio de fala
+Tokens VENDEDOR / total tokens → seller_talk_ratio
+Global
+Interrupções
+Sobreposição de timestamps (se disponível) ou turno < 3 tokens
+Global
+2b — Checklist Zeiss V.6 — Itens Determinísticos (15 de 22)
+Chave do Item
+Keywords Gatilho
+Janela
+Role
+cumprimentou_cliente
+"boa tarde" · "bem-vindo" · "olá" · "bom dia"
+Turnos 0–3
+VENDEDOR
+perguntou_conhece_zeiss
+"conhece a zeiss" · "conhece a marca" · "já ouviu falar da zeiss"
+Qualquer
+VENDEDOR
+pegou_oculos_lensometro
+"lensômetro" · "medir seus óculos" · "verificar a graduação"
+Qualquer
+VENDEDOR
+limpou_lens_wipes
+"lens wipe" · "paninho" · "limpei" · "limpeza dos óculos"
+Qualquer
+VENDEDOR
+usou_ultrassonico
+"ultrassônico" · "ultrassom" · "aparelho de limpeza"
+Qualquer
+Qualquer
+perguntou_profissao
+"profissão" · "trabalha" · "o que você faz" · "sua área"
+Qualquer
+VENDEDOR
+perguntou_eletronicos
+"computador" · "celular" · "tela" · "eletrônico" · "digital"
+Qualquer
+VENDEDOR
+perguntou_esportes
+"esporte" · "academia" · "corrida" · "tênis" · "bicicleta"
+Qualquer
+VENDEDOR
+perguntou_dirige
+"dirige" · "carro" · "volante" · "noite ao volante"
+Qualquer
+VENDEDOR
+perguntou_sensibilidade_luz
+"luz" · "sensibilidade" · "ofuscamento" · "claridade" · "sol"
+Qualquer
+VENDEDOR
+mencionou_iterminal_visufit
+"iTerminal" · "Visufit" · "equipamento de medição" · "medição digital"
+Qualquer
+VENDEDOR
+solicitou_telefone_email
+"telefone" · "WhatsApp" · "e-mail" · "contato" · "posso anotar"
+Qualquer
+VENDEDOR
+ofertou_photofusion_antivirus
+"Photofusion" · "fotossensível" · "antirrisco" · "antirreflexo"
+Qualquer
+VENDEDOR
+mencionou_zeiss_clareza
+"lente Zeiss" · "tecnologia Zeiss" · "qualidade Zeiss" · "Zeiss é"
+Qualquer
+VENDEDOR
+usou_app_visuconsult
+"VisuConsult" · "aplicativo" · "app da Zeiss"
+Qualquer
+Qualquer
+2c — Checklist Zeiss V.6 — Itens que Exigem LLM (7 de 22)
+Itens sem evidência linguística direta → passam para Agente 1
+• explicou_zeiss_com_clareza → avaliação qualitativa do conteúdo explicado, não só presença de keywords
+• realizou_medicao_com_equipamento → pode não ter keyword explícita se feito sem comentário verbal
+• ofertou_lente_maior_valor_primeiro → requer análise de sequência de apresentação de produtos
+• demonstrou_interesse_genuino → padrão conversacional (escuta ativa, perguntas de continuidade)
+• utilizou_recurso_visual → tablet/demotool pode ser usado sem menção verbal
+• consultou_tabela_precos → pode ser feito silenciosamente
+• contato_pos_visita_7_dias → requer dado externo ou follow-up registrado — não resolvível por transcrição
+E3
+Agentes de Julgamento Semântico
+7 agentes LLM · Contexto mínimo · Schema obrigatório
+Os agentes LLM recebem exclusivamente contexto estruturado produzido pela E2, nunca a transcrição inteira. Cada agente tem um único escopo, uma única taxonomia e um schema de saída validado por código antes de ser aceito.
+Agente 1 — Julgamento de Checklist Ambíguo
+Input: itens com requires_llm=true + turnos relevantes + produtos detectados na E2.
+Output obrigatório por item: { verdict: SIM|NÃO|INCONCLUSIVO, confidence: 0-1, evidence: string, turn_id: int }
+Agente 2 — Classificação de Objeções e Eficácia
+Input: todos os turnos do CLIENTE. Taxonomia fechada de tipos de objeção:
+Tipo de Objeção
+Definição
+PRECO_ALTO
+Cliente expressa que o preço está acima do esperado
+PRECO_SEM_CONTEXTO
+"Vou pensar" sem objeção explícita — hesitação genérica
+PRECISA_CONSULTAR_TERCEIRO
+Precisa falar com cônjuge, sócio, parente
+JA_TEM_PRODUTO_SIMILAR
+Já tem óculos recente ou produto equivalente
+COMPARACAO_CONCORRENTE
+Menciona concorrente com preço ou qualidade favorável
+QUALIDADE_QUESTIONADA
+Dúvida sobre durabilidade, procedência ou eficácia
+URGENCIA_BAIXA
+"Não estou com pressa" · "só vim pesquisar"
+CONDICAO_PAGAMENTO
+Questiona parcelamento, disponibilidade de crédito, entrada
+DESCONFIANCA_MARCA
+Ceticismo sobre Zeiss especificamente
+Output por objeção: { type, text, turn_id, vendor_response_text, efficacy: CONTORNOU|NAO_CONTORNOU|PARCIAL, phase }
+Agente 3 — Scoring de Intenção de Compra
+Input: turnos do CLIENTE + objeções classificadas + entidades detectadas (preços perguntados, produtos experimentados).
+Usa Chain-of-Thought interno obrigatório antes de emitir score.
+Output: { intent_score: 0-100, intent_classification: BROWSING|PESQUISANDO|PRONTO|URGENTE, cot_reasoning: string, urgency_detected: bool, urgency_evidence: string, buy_triggers_detected: string[] }
+Agente 4 — Sentimento por Fase
+Executa em loop por fase (não por transcrição inteira). Recebe: segmentos de uma fase + role do falante.
+Output por fase: { phase, sentiment_label: positive|neutral|negative, intensity: 0-1, dominant_emotion: frustração|entusiasmo|dúvida|satisfação|pressa|tédio }
+Output agregado: conversation_heatmap → array de segmentos com índice e intensidade para visualização.
+Agente 5 — Perfil Psicológico e Comportamental
+Input: todos os turnos do CLIENTE + métricas de fala da E2.
+Output: { archetype: RACIONAL|EMOCIONAL|SOCIAL|CONSERVADOR, decision_style: string, risk_profile: string, trust_level_towards_seller: string, price_sensitivity: high|medium|low|uncertain, inferred_age_range: string, inferred_gender: string, inferred_socioeconomic_class: string, estimated_purchasing_power: string, purchase_type: new_customer|returning_customer|uncertain, preferred_communication_style: string, client_engagement_level: high|medium|low, client_knowledge_level: expert|intermediate|novice, repurchase_signal: bool }
+Agente 6 — Oportunidades Perdidas
+Input: entidades de produtos detectadas + catálogo completo + turnos do CLIENTE.
+Output: { total_estimated_value_loss: number, cross_sell_not_offered: [ { product, estimated_value, client_signal } ], upsell_not_offered: [ { product_offered, product_premium, estimated_delta_value } ], implicit_needs_not_addressed: string[], products_requested_not_shown: string[], products_shown_not_requested: string[] }
+Agente 7 — Síntese Qualitativa (executa por último)
+Este agente recebe os outputs estruturados dos 6 agentes anteriores — nunca a transcrição. Gera narrativa a partir de fatos já classificados, não de inferências sobre texto bruto.
+Output: { summary_narrative: string (3-5 parágrafos), strengths: string[], improvements: string[], training_recommendation: string, compliance_flags: { abusive_practice_detected, unfulfillable_promise_detected, warranty_mentioned, consumer_rights_mentioned, mandatory_script_followed, compliance_score, compliance_alerts: string[], abusive_practice_description, unfulfillable_promise_description }, sales_techniques_detected: string[], empathy_demonstrated: bool, active_listening_signals: bool, language_complexity: technical|balanced|simple, jargon_usage: high|medium|low, personalization_score: 0-100, follow_up: { contact_info_collected, follow_up_promised, contact_type_collected, follow_up_timeframe_mentioned }, loss_to_competitor_risk: string, competitive_mentions: [ { competitor_name, comparison_direction, client_statement } ] }
+E4
+Validação e Consolidação
+Código puro · Zero LLM · Input: outputs dos 7 agentes
+Schema validation: verificar tipos, ranges (0–1, 0–100), enums e campos obrigatórios de cada agente
+Re-execução automática: máximo 2 tentativas com prompt de correção explicitando o erro de schema
+Rastreabilidade: cada campo recebe source (DETERMINISTIC ou LLM_AGENT_N), evidence, turn_id, confidence
+Consolidação: código monta o objeto final — o LLM nunca monta o objeto consolidado
+E5
+Persistência Estruturada
+Supabase · Schema fixo · Relatórios via SQL
+O objeto consolidado é persistido em tabelas relacionais com schema fixo. Esta é a mudança arquitetural mais crítica: relatórios quantitativos passam a ser queries SQL determinísticas, comparáveis entre atendimentos, sem dependência de LLM.
+4. Schema Completo — Mapeado do Código Real
+O schema abaixo foi derivado diretamente dos 9 módulos de relatório existentes (reports_engine.js + r_*.js). São os campos exatos que os renderers esperam. O pipeline deve garantir que todos existam com os tipos corretos.
+4.1 Estrutura do JSON de Classificação (audio_classifications)
+O campo classification_data deve ter exatamente estas 20 top-level keys, todas obrigatórias:
+checklist
+Campo
+Tipo e Descrição
+total_score
+number · 0–100 · percentual de itens atendidos ponderado por peso
+items_passed
+integer · itens com verdict SIM
+items_failed
+integer · itens com verdict NÃO
+items_uncertain
+integer · itens com verdict INCONCLUSIVO
+items
+array · [ { item_key, item_label, result: pass|fail|not_applicable, source, evidence, confidence, weight } ]
+sales_metrics
+Campo
+Tipo e Descrição
+conversion.sale_completed
+boolean
+conversion.loss_reason
+string · motivo se sale_completed = false
+ticket.final_value_mentioned
+number · valor final mencionado em R$
+ticket.discount_percentage
+number · desconto concedido em %
+ticket.premium_offer_made
+boolean · ofertou lente de maior valor
+timing.time_to_first_product_mention_seconds
+number
+timing.time_to_price_presentation_seconds
+number
+timing.decision_time_after_price_seconds
+number
+efficiency_score
+number · 0–100 · score composto de eficiência comercial
+speaker_inference
+Campo
+Tipo e Descrição
+seller_talk_ratio
+number · 0–1 · fração de tokens do vendedor
+client_talk_ratio
+number · 0–1 · fração de tokens do cliente
+interruptions_detected
+integer
+open_questions_by_seller
+integer
+closed_questions_by_seller
+integer
+conversation_structure
+Campo
+Tipo e Descrição
+phases
+array · [ { phase_name, start_turn, end_turn, duration_estimate } ]
+sale_concluded
+boolean
+total_turns
+integer
+purchase_intent
+Campo
+Tipo e Descrição
+intent_score
+number · 0–100
+intent_classification
+string · BROWSING|PESQUISANDO|PRONTO|URGENTE
+urgency_detected
+boolean
+urgency_evidence
+string
+nlp_analysis
+Campo
+Tipo e Descrição
+sentiment
+object · { seller: positive|neutral|negative, client: positive|neutral|negative }
+emotions_detected
+array · [ { emotion, intensity, role } ]
+entities
+object · { products: string[], prices: number[], brands: string[], competitors: string[] }
+keywords_frequency
+object · { word: count } — top 20 palavras
+buy_triggers_detected
+string[] · sinais de fechamento verbalizados
+urgency_detected
+boolean
+urgency_evidence
+string
+objections
+Campo
+Tipo e Descrição
+(array)
+[ { objection_type, objection_text, turn_id, vendor_response_text, objection_resolved: bool, phase } ]
+lost_opportunities
+Campo
+Tipo e Descrição
+total_estimated_value_loss
+number · R$ total estimado
+cross_sell_not_offered
+array · [ { product, estimated_value, client_signal } ]
+upsell_not_offered
+array · [ { product_offered, product_premium, estimated_delta_value } ]
+implicit_needs_not_addressed
+string[]
+products_requested_not_shown
+string[]
+products_shown_not_requested
+string[]
+psychological_profile + customer_profile + behavioral_trends
+Campo
+Tipo e Enums
+psychological_profile.archetype
+RACIONAL|EMOCIONAL|SOCIAL|CONSERVADOR
+psychological_profile.decision_style
+string
+psychological_profile.risk_profile
+string
+psychological_profile.trust_level_towards_seller
+string
+customer_profile.inferred_age_range
+string · ex: '35–45'
+customer_profile.inferred_gender
+male|female|non_binary|uncertain
+customer_profile.inferred_socioeconomic_class
+string
+customer_profile.estimated_purchasing_power
+string
+customer_profile.price_sensitivity
+high|medium|low|uncertain
+customer_profile.purchase_type
+new_customer|returning_customer|uncertain
+customer_profile.preferred_communication_style
+string
+behavioral_trends.client_engagement_level
+high|medium|low
+behavioral_trends.client_knowledge_level
+expert|intermediate|novice
+behavioral_trends.repurchase_signal
+boolean
+critical_moments + hidden_criticisms + competitive_analysis
+Campo
+Tipo e Descrição
+critical_moments
+array · [ { moment_type: TURNAROUND|PERDA|OBJECTION|DECISAO|ENGAJAMENTO, timestamp_pct, description } ]
+hidden_criticisms
+array · [ { type, description, severity: high|medium|low, turn_id } ]
+competitive_analysis.competitors_mentioned
+array · [ { competitor_name, comparison_direction: favorable|unfavorable, client_statement } ]
+competitive_analysis.loss_to_competitor_risk
+string · high|medium|low
+compliance + communication_analysis + follow_up
+Campo
+Tipo e Descrição
+compliance.abusive_practice_detected
+boolean
+compliance.abusive_practice_description
+string
+compliance.unfulfillable_promise_detected
+boolean
+compliance.unfulfillable_promise_description
+string
+compliance.warranty_mentioned
+boolean
+compliance.consumer_rights_mentioned
+boolean
+compliance.mandatory_script_followed
+boolean
+compliance.compliance_score
+number · 0–100
+compliance.compliance_alerts
+string[]
+communication_analysis.empathy_demonstrated
+boolean
+communication_analysis.active_listening_signals
+boolean
+communication_analysis.language_complexity
+technical|balanced|simple
+communication_analysis.jargon_usage
+high|medium|low
+communication_analysis.personalization_score
+number · 0–100
+communication_analysis.sales_techniques_detected
+string[]
+follow_up.contact_info_collected
+boolean
+follow_up.follow_up_promised
+boolean
+follow_up.contact_type_collected
+phone|email|whatsapp|multiple|none
+follow_up.follow_up_timeframe_mentioned
+string
+conversation_heatmap
+array · [ { segment_index, intensity: 0-1, sentiment, phase } ]
+predictive.churn_risk
+string · high|medium|low
+predictive.best_follow_up_window
+string
+predictive.projected_ticket
+number
+5. Plano de Execução — 5 Fases
+Cada fase entrega valor independente. O sistema atual continua funcionando em paralelo durante toda a transição. Nenhuma fase bloqueia o uso do endpoint /classify existente até que a migração esteja validada.
+FASE 1 — Fundação — Ontologia e Schema
+Prioridade máxima · Sem ela, nenhuma outra fase tem valor
+Por que começar pela ontologia, não pelo código
+O schema das tabelas e os arquivos JSON de ontologia são o contrato que governa tudo.
+Mudanças de schema após a Fase 2 geram retrabalho em cascata nos agentes e nos relatórios.
+Invista 2–3h na revisão manual da ontologia antes de abrir o Antigravity.
+Criar checklist_zeiss_v6.json com os 22 itens: keywords por item, role, janela, peso, flag requires_llm
+Criar product_catalog.json: produtos Zeiss com variações linguísticas e categorias
+Criar objection_taxonomy.json: 9 tipos com definição, exemplos e keywords associadas
+Criar o script SQL das 6 novas tabelas: conversation_turns, conversation_entities, checklist_results, conversation_analysis, objections, lost_opportunities — com RLS padrão do projeto
+Implementar parser.js: função parseTranscriptionToTurns(text) → array de turnos + confidence_score
+Implementar extractor.js: função extractDeterministicSignals(turns, ontology) → objeto com entidades, checklist_evidence, metrics
+Teste unitário com 3 transcrições reais antes de avançar
+FASE 2 — Pipeline de Classificação
+Core do produto · Substitui o endpoint /classify atual
+Criar POST /functions/analyze-v2 no bun_server.js — orquestrador do pipeline E1→E5
+Implementar Agente 1 (checklist ambíguo): prompt + schema validation + re-execução automática
+Implementar Agente 2 (objeções): taxonomia fechada, output array com turn_id e eficácia
+Implementar Agente 3 (intenção): CoT obrigatório, output score + classificação + buy_triggers
+Implementar Agente 4 (sentimento por fase): loop por fase, output por segmento + heatmap
+Implementar Agente 5 (perfil): arquétipos fechados, output com todos os campos do schema 4.1
+Implementar Agente 6 (oportunidades): gap analysis determinístico + LLM para ambíguos
+Implementar Agente 7 (síntese): recebe outputs 1–6, gera narrativa + compliance + follow_up + competitive
+Integrar telemetria: cada agente registra tokens e custo em usage_telemetry com operation_type = 'agent_N'
+Adicionar botão 'Analisar v2' no dashboard.html — mantendo o botão original em paralelo
+FASE 3 — Relatórios Estruturados
+Primeiro relatório comparável entre atendimentos
+Criar views SQL no Supabase: vw_checklist_summary, vw_objections_by_type, vw_intent_distribution, vw_vendor_performance, vw_lost_opportunities
+Refatorar os 9 módulos r_*.js: substituir parsing de JSONB por queries nas views — mantendo o mesmo HTML de renderização
+Implementar filtro por loja e por período nas views
+Implementar dashboard de benchmarking: vendedor vs média da loja, evolução temporal
+Validar paridade entre output do /analyze-v2 e os campos esperados pelos renderers
+FASE 4 — Inteligência Avançada
+Diferenciação competitiva · Funcionalidades #13–#21 da lista
+Biblioteca de melhores práticas: busca semântica sobre conversation_turns com embeddings pgvector
+Análise preditiva: modelo de scoring baseado em padrões históricos de checklist_results
+Construtor de checklist personalizável: UI para criar novos checklists com pesos e keywords
+Detector de momentos críticos aprimorado: evolução do intent_score ao longo da conversa
+Integração CRM: webhook para Salesforce, HubSpot, RD Station via endpoint configurável
+FASE 5 — Ecossistema e Escala
+Produto completo · Multi-tenant · API pública
+Simulador de conversas com IA: geração de personas sintéticas para treinamento de vendedores
+Gestão multi-loja e multi-tenant: hierarquia região → cidade → loja com RLS por hierarquia
+Marketplace de análises: compartilhamento de prompts e checklists entre usuários
+API REST pública: autenticação por API key, documentação OpenAPI
+Gamificação: pontos, badges e ranking de vendedores com triggers automáticos
+6. Execução com Antigravity
+O Antigravity é agent-first: os agentes planejam, executam e verificam. Para minimizar drift e retrabalho, cada tarefa entregue ao agente deve conter o contexto exato do projeto, a restrição técnica e o critério de aceitação.
+6.1 Template de Prompt por Tarefa
+CONTEXTO DO PROJETO:
+Runtime: Bun. Backend: Netlify Functions. Banco: Supabase com RLS por usuário.
+Padrão de endpoint: ver bun_server.js. Padrão de tabela: ver classification_setup.sql.
+Toda chamada LLM deve registrar telemetria em usage_telemetry (ver task.md fase 2).
+TAREFA: [descrição específica do que construir]
+RESTRIÇÕES:
+• Não quebrar endpoints existentes (/classify, /transcribe, /chat_v2)
+• Manter RLS alinhado ao padrão existente
+• Schema de output dos agentes: ver Seção 4 do plano técnico
+CRITÉRIO DE ACEITAÇÃO: [condição específica de quando a tarefa está completa]
+6.2 Ordem de Execução e Dependências
+ID
+Tarefa
+Dependência
+T1.1
+Criar checklist_zeiss_v6.json + product_catalog.json + objection_taxonomy.json
+Fase 1 · Sem dependência · MANUAL (revisão humana)
+T1.2
+Script SQL das 6 novas tabelas com RLS
+Fase 1 · Depende de T1.1
+T1.3
+Implementar parser.js + extractor.js + testes unitários
+Fase 1 · Depende de T1.1–T1.2
+T2.1
+Criar /analyze-v2 com orquestrador do pipeline
+Fase 2 · Depende de T1.3
+T2.2
+Agentes 1–4 (checklist, objeções, intenção, sentimento)
+Fase 2 · Depende de T2.1
+T2.3
+Agentes 5–7 (perfil, oportunidades, síntese)
+Fase 2 · Depende de T2.1 · Paralelo com T2.2
+T2.4
+Integração telemetria + botão dashboard
+Fase 2 · Depende de T2.2–T2.3
+T3.1
+Views SQL no Supabase
+Fase 3 · Depende de T2.4
+T3.2
+Refatorar r_*.js para SQL views
+Fase 3 · Depende de T3.1
+7. Mapeamento das 40 Funcionalidades do Sistema
+Cada funcionalidade da lista original é mapeada para o método de implementação e a fase do plano. Funcionalidades marcadas com ● já têm renderer existente no projeto — precisam apenas de dados estruturados como input.
+Grupo 1 — Captura e Gestão de Áudio (#1)
+Escopo excluído desta versão conforme alinhamento. Tratado em etapa separada.
+Grupo 2 — Processamento de Áudio (#2)
+Funcionalidade
+Método
+Fase
+Transcrição áudio→texto
+Whisper / Gemini (já implementado)
+Fase 1 (existente)
+Identificação de falantes
+Parser E1 com diarização ou heurística
+Fase 1
+Marcação de timestamps
+word-level timestamps do Whisper se disponível
+Fase 1
+Detecção de silêncios / qualidade
+Pré-processamento de áudio (fora do pipeline NLP)
+Fase 5
+Segmentação em fases
+E2 determinístico (padrões de turno + entidades)
+Fase 2
+Detecção de idioma
+Whisper retorna language automaticamente
+Fase 1 (existente)
+Grupo 3 — Análise Semântica e NLP (#3) ●
+Funcionalidade
+Método
+Fase
+Extração de entidades (produtos, preços, marcas)
+E2 determinístico (regex + catálogo)
+Fase 1–2
+Detecção de objeções
+Agente 2 + tabela objections
+Fase 2
+Análise de sentimento por trecho
+Agente 4 por fase → conversation_heatmap ●
+Fase 2
+Detecção de emoções
+Agente 4 → nlp_analysis.emotions_detected ●
+Fase 2
+Identificação de tópicos emergentes
+keywords_frequency ●
+Fase 2
+Detecção de menção a concorrentes
+E2 (dicionário) + Agente 7 competitive_analysis ●
+Fase 2
+Identificação de gatilhos de compra
+Agente 3 → buy_triggers_detected ●
+Fase 2
+Detecção de urgência
+Agente 3 → urgency_detected ●
+Fase 2
+Ratio de fala vendedor/cliente
+E2 determinístico → speaker_inference ●
+Fase 1–2
+Perguntas abertas vs fechadas
+E2 determinístico → open/closed_questions ●
+Fase 1–2
+Grupo 4 — Construtor de Prompts (#4)
+Funcionalidade
+Método
+Fase
+Interface visual para análises customizadas
+UI sobre os 7 agentes configuráveis
+Fase 4
+Versionamento e biblioteca de templates
+Templates pré-prontos baseados nos 7 agentes
+Fase 4
+Grupo 5 — Checklist Zeiss V.6 (#5) ●
+Funcionalidade
+Método
+Fase
+15 itens com keyword direta
+E2 determinístico via checklist_zeiss_v6.json
+Fase 1–2
+7 itens ambíguos
+Agente 1 — julgamento com evidência obrigatória
+Fase 2
+Score total ponderado
+SQL sobre checklist_results → checklist.total_score ●
+Fase 3
+Checklist genérico personalizável (#5.2)
+Construtor de ontologia + Agente 1 configurável
+Fase 4
+Grupos 6–10 — Métricas de Vendas e Oportunidades (#6–#10) ●
+Funcionalidade
+Método
+Fase
+Taxa de conversão, ticket médio, ROI (#6) ●
+SQL sobre sales_metrics (views vw_vendor_performance)
+Fase 3
+Ticket médio por loja, vendedor, horário (#6) ●
+SQL agregado com GROUP BY sobre store_id
+Fase 3
+Tempo por fase (#10) ●
+SQL sobre conversation_structure.phases
+Fase 3
+Cross-sell ignorado (#7) ●
+Agente 6 → lost_opportunities.cross_sell_not_offered
+Fase 2
+Up-sell ignorado (#7) ●
+Agente 6 → lost_opportunities.upsell_not_offered
+Fase 2
+Produtos pedidos vs apresentados (#8) ●
+E2 + Agente 6 → products_requested / products_shown
+Fase 2
+Tendências de comportamento (#9)
+SQL agregado com janela temporal + vistas mensais
+Fase 3
+Grupos 11–16 — Perfil e Comportamento (#11–#16) ●
+Funcionalidade
+Método
+Fase
+Preferências por estilos/assuntos (#11)
+keywords_frequency + engagement analysis (Agente 5)
+Fase 2
+Perfil psicológico e arquétipo (#15) ●
+Agente 5 → psychological_profile
+Fase 2
+Perfil demográfico inferido (#16) ●
+Agente 5 → customer_profile
+Fase 2
+Segmentação por poder aquisitivo (#16) ●
+estimated_purchasing_power + price_sensitivity
+Fase 2
+Grupos 17–21 — Benchmarking e Treinamento (#17–#21)
+Funcionalidade
+Método
+Fase
+Comparação vendedor vs vendedor (#17)
+SQL views vw_vendor_performance GROUP BY store_id
+Fase 3
+Ranking de performance (#17)
+SQL ORDER BY checklist_score, efficiency_score
+Fase 3
+Biblioteca de melhores práticas (#18)
+pgvector embeddings sobre conversation_turns
+Fase 4
+Catálogo de objeções e respostas (#19) ●
+SQL sobre tabela objections + efficacy
+Fase 3
+Análise de conformidade (#20) ●
+Agente 7 → compliance fields
+Fase 2
+Identificação de gaps por vendedor (#21)
+SQL: checklist_results WHERE verdict = NAO GROUP BY vendedor
+Fase 3
+Plano de ação individualizado (#21)
+Agente 7 → training_recommendation
+Fase 2
+Grupos 22–40 — Dashboards, Integrações e Avançados (#22–#40)
+Funcionalidade
+Método
+Fase
+Dashboards e visualizações (#22) ●
+Chart.js sobre SQL views (refactor r_*.js existentes)
+Fase 3
+Player de áudio sincronizado (#27)
+Existente no chat.html — integrar timestamps de fases
+Fase 3
+Transcrição interativa (#28)
+Existente no chat.html — adicionar highlights de entidades
+Fase 3
+Exportação e compartilhamento (#29)
+Existente (TXT/JSON/CSV) — adicionar PDF do relatório
+Fase 3
+Alertas e notificações (#30)
+Supabase Realtime + regras configuráveis por threshold
+Fase 4
+Análise competitiva (#31) ●
+Agente 7 → competitive_analysis
+Fase 2
+Análise de comunicação (#32) ●
+Agente 7 → communication_analysis
+Fase 2
+Detecção de momentos críticos (#33) ●
+Agente 3 evolução + critical_moments array
+Fase 2–4
+Análise de follow-up (#34) ●
+Agente 7 → follow_up
+Fase 2
+Simulador de conversas com IA (#35)
+Personas sintéticas + Agente 3 como avaliador
+Fase 5
+Integração CRM/ERP (#23)
+Webhooks configuráveis + mapeamento de campos
+Fase 4
+Gestão catálogo de produtos (#24)
+product_catalog.json → UI de edição
+Fase 4
+Gestão lojas e territórios (#25)
+store_id existente → hierarquia regional
+Fase 5
+Análise preditiva (#39)
+Modelo baseado em histórico de checklist_results + intent_score
+Fase 4
+Heatmap de conversa (#40) ●
+Agente 4 → conversation_heatmap → visualização Chart.js
+Fase 2
+8. Decisões Críticas e Riscos
+8.1 Migração Gradual — Sem Big Bang
+O endpoint /classify atual continua operando. O novo /analyze-v2 funciona em paralelo. A migração do relatorio_dinamico.html para as views SQL é feita módulo a módulo (r_qa_heatmap primeiro, por ser o mais crítico para o caso Zeiss). Nenhuma migração quebra o sistema em produção.
+8.2 Schema Imutável na Fase 1
+Os arquivos JSON de ontologia e as tabelas SQL definidos na Fase 1 não podem mudar após o início da Fase 2. Mudanças exigem migração de dados e refatoração dos agentes. Este é o único ponto no projeto onde vale gastar tempo extra antes de codar.
+8.3 T1.1 é Manual — Não Delegue ao Antigravity
+A revisão da ontologia do checklist Zeiss é trabalho humano
+O checklist_zeiss_v6.json não pode ser gerado pelo Antigravity sem revisão manual.
+Cada keyword gatilho precisa ser validada contra transcrições reais.
+Um falso positivo no item 'cumprimentou_cliente' distorce o score de todos os atendimentos.
+Dedique 2–3 horas revisando os 22 itens antes de prosseguir para T1.2.
+8.4 Risco — Qualidade da Transcrição
+Risco principal: role assignment incorreto no parser
+Se a transcrição não tiver marcadores de falante, o parser usa heurística posicional.
+Múltiplos vendedores, terceiros na conversa ou baixa qualidade de áudio geram role errado.
+Role errado no VENDEDOR ou CLIENTE invalida todo o checklist e as métricas de fala.
+Mitigação: confidence_score no parser + flag manual_review para casos abaixo de 0.6.
+9. Sequência de Início Imediato
+A Fase 1 começa pela ontologia — não pelo código. Os 3 arquivos JSON de ontologia são a única peça do sistema que exige conhecimento de domínio que o Antigravity não tem. Tudo o mais pode ser delegado.
+Sequência para começar
+1. [MANUAL 2–3h] Revisar e completar checklist_zeiss_v6.json com os 22 itens, keywords e pesos
+2. [MANUAL 30min] Criar product_catalog.json com produtos e variações linguísticas do catálogo Zeiss
+3. [MANUAL 15min] Criar objection_taxonomy.json com os 9 tipos, definições e exemplos
+4. [ANTIGRAVITY T1.2] Criar script SQL das 6 novas tabelas seguindo o padrão de classification_setup.sql
+5. [ANTIGRAVITY T1.3] Implementar parser.js + extractor.js com funções especificadas na Seção 3
+6. [VALIDAÇÃO] Testar com 3 transcrições reais — verificar role assignment e detecção de checklist
+7. [ANTIGRAVITY T2.1] Criar /analyze-v2 com orquestrador do pipeline
+8. [ANTIGRAVITY T2.2–T2.3] Implementar os 7 agentes com schema da Seção 4

@@ -1,0 +1,3535 @@
+PLANO TÉCNICO DE ARQUITETURA
+Sistema de Cliente Oculto · Varejo Ótico Premium
+v5.0 · Definitivo · Pipeline Local-First · 9 Agentes · 40 Features · 7 Fases · 65 Tarefas
+Projeto
+Stack
+Versão
+Status
+cliente-oculto
+(guijcastro/github)
+Bun · Netlify · Supabase
+Antigravity
+v5.0 · Mar 2026
+Refatoração Arquitetural Total
+Princípio Central
+Todo processamento que puder ser feito localmente DEVE ser feito localmente. O LLM entra somente onde a análise exige julgamento qualitativo que código não produz. Cada agente LLM recebe o menor contexto possível, responde UMA pergunta com schema obrigatório validado por código. Este documento é a fusão completa do diagnóstico original (p0), da especificação dos 9 agentes com schemas completos e matriz de rastreabilidade (v2), e da auditoria item a item das 40 features com separação local/LLM por sub-etapa (v4).
+1. Diagnóstico e Estado Atual
+1.1 Infraestrutura Entregue — 13 Fases
+Componente
+Descrição
+Status
+Upload & Storage
+Áudio → Supabase Storage · metadata loja, vendedor, data
+✓ Preservado
+Transcrição
+Whisper (OpenAI) e Gemini via Netlify Functions · telemetria custo/min
+✓ Preservado
+Interface de Chat
+Multi-turn · persona configurável · exportação TXT/JSON/CSV
+✓ Preservado
+Telemetria
+Tokens, custo, latência em usage_telemetry
+✓ Preservado · expandir por agente
+Endpoint /classify
+JSON-mode OpenAI/Gemini · JSONB em audio_classifications
+→ Deprecar após Fase 2 validada com ≥10 conversas reais
+9 módulos de relatório
+r_qa_heatmap · r_vendas · r_oportunidades · r_atrito · r_nlp · r_comportamento · r_intencao_preditivo · r_falantes_fases · r_compliance_followup
+→ Refatorar na Fase 3 para SQL views
+Auth + RLS
+Supabase Auth por usuário
+✓ Preservado · expandir hierarquia Fase 6
+Settings
+Multi-provider · pricing.json editável
+✓ Preservado
+1.2 Problema Central
+DIAGNÓSTICO: audio_classifications.classification_data é JSONB sem schema definido. O LLM recebe a transcrição inteira e produz JSON diferente a cada execução. Os 9 módulos tentam parsear campos que podem não existir. Resultado: relatórios genéricos, campos undefined, comparações impossíveis entre atendimentos. Causa raiz: (1) não há separação entre extração determinística e julgamento semântico; (2) os agentes não são mapeados para as 40 funcionalidades do produto; (3) tudo que é possível fazer localmente é delegado ao LLM.
+1.3 Princípio Arquitetural — O Erro a Evitar
+O LLM não é motor de análise. É árbitro de julgamento qualitativo em situações específicas. Cada decisão de usar LLM deve ser justificada pela impossibilidade de resolver localmente. Features que podem ser resolvidas com regex, dicionário, SQL ou aritmética DEVEM ser resolvidas assim. Este plano documenta, para cada feature, qual parte resolve local e qual parte — se alguma — vai ao LLM.
+2. Mapa de Responsabilidades — Local vs LLM
+2.1 Escala de Métodos — Do Mais Local ao Mais Inferencial
+Nível
+Método
+Custo LLM
+Quando usar
+Exemplos no sistema
+0 · Determinístico puro
+Regex · contagem · aritmética · dicionário
+Zero
+Sempre que possível
+Ratio de fala, timestamps, preços, 15 itens do checklist
+1 · SQL sobre dados estruturados
+Views · aggregations · GROUP BY · janelas temporais
+Zero
+Métricas, benchmarking, tendências
+Ranking vendedor, tendências sazonais, correlação conversão
+2 · Embedding local
+sentence-transformers via ONNX · pgvector cosine
+Zero (sem API)
+Busca por similaridade
+Biblioteca de práticas #18, sugestão de templates #4
+3 · LLM contexto mínimo + schema fixo
+1 call · turns filtrados · enum obrigatório
+Baixo
+Classificação qualitativa de item específico
+A1 (checklist ambíguo), A2 (tipo de objeção)
+4 · LLM com cadeia de raciocínio
+CoT obrigatório · scoring multidimensional
+Médio
+Julgamento com auditabilidade obrigatória
+A3 (intenção), A5 (perfil psicológico)
+5 · LLM de síntese sobre dados pré-processados
+Recebe outputs dos agentes · nunca transcrição crua
+Médio
+Narrativa sobre fatos já classificados
+A7 (síntese), A8 (simulador)
+2.2 O que o LLM Nunca Faz Neste Sistema
+Proibição
+Justificativa
+Alternativa
+Receber a transcrição inteira
+Viola princípio de contexto mínimo; JSON diferente a cada execução; impossível auditar
+E1+E2 processam localmente; cada agente recebe fragmento específico
+Calcular métricas numéricas (ticket, ratio de fala, tempo de fase)
+Aritmética não é julgamento qualitativo; LLM alucina valores
+SQL puro sobre tabelas E5 com valores calculados por código
+Gerar o conversation_heatmap[] diretamente
+É composição dos outputs de fase do A4 — montagem por código
+A4 retorna sentimento por fase; código monta o array final
+Calcular total_estimated_value_loss
+Somatório de preços do catálogo — aritmética pura
+Código lê product_catalog.json e soma; LLM não vê números
+Gerar embeddings via chamada de API
+Texto estruturado (arquétipo+tipos) é operação local
+sentence-transformers no script Bun via ONNX; zero API call
+Classificar os 15 itens determinísticos do checklist
+Keywords gatilho diretas — dicionário resolve com certeza superior
+E2 com checklist_zeiss_v6.json e dictionary matching por janela e role
+Inferir dados dependentes de CRM sem o dado
+Frequência de compra, LTV, histórico — LLM alucina
+Marcar como null + CRM_REQUIRED; preencher via integração Fase 5
+2.3 Mapa Geral por Dimensão de Análise
+Dimensão
+Método
+Nível
+Features
+Parsing de turnos, roles, timestamps
+Regex + heurísticas posicionais
+0
+#2, #27, #28
+Entidades: produto, preço, marca
+Dicionário + regex calibrado
+0
+#3, #8, #24, #31
+Ratio de fala, perguntas, interrupções
+Contagem de tokens e padrões posicionais
+0
+#3, #10, #32
+Checklist keyword direta (15/22 itens)
+Dictionary match por janela e role · checklist_zeiss_v6.json
+0
+#5
+Segmentação de fases da conversa
+Padrões de turno + entidades detectadas
+0
+#2, #10, #33, #40
+Métricas de vendas · tempo · benchmarking
+SQL sobre tabelas estruturadas · Views SQL
+1
+#6, #9, #10, #17, #22
+Tendências e correlações
+SQL com janelas temporais
+1
+#9, #18, #34
+Busca por situação na biblioteca de práticas
+Embedding local + pgvector cosine similarity
+2
+#18, #4
+Checklist ambíguo (7/22 itens)
+LLM A1 · contexto mínimo · enum fechado
+3
+#5, #20
+Classificação de objeções e eficácia
+LLM A2 · taxonomia 9 tipos fechados
+3
+#3, #13, #19, #33
+Scoring de intenção de compra
+LLM A3 · CoT 4 dimensões obrigatório · proxies locais primeiro
+4
+#3, #6, #14, #33, #39
+Sentimento por fase (loop)
+LLM A4 · 1 call por fase · não full-text
+3-4
+#3, #11, #13, #33, #40
+Perfil psicológico e demográfico
+LLM A5 · arquétipos fechados · turnos cliente apenas
+4
+#11, #15, #16, #39
+Oportunidades: gap local primeiro, LLM só qualificação
+E2 det + LLM A6 para realistically_addressable
+3
+#7, #8, #11
+Síntese qualitativa narrativa
+LLM A7 · recebe outputs A1-A6 · nunca transcrição
+5
+#12,#13,#20,#21,#31,#32,#33,#34
+Simulação de persona e feedback de treinamento
+LLM A8 · estado de sessão mantido
+5
+#35, #21
+Embedding para biblioteca de melhores práticas
+A9 · sentence-transformers local · texto estruturado
+2
+#18
+3. Pipeline Local-First — 6 Etapas
+Etapa
+Nome
+Tipo
+Custo LLM
+Output principal
+E1
+Normalização e Parsing
+Local · código puro
+Zero
+turns[] · role · confidence_score · manual_review
+E2
+Extração Determinística
+Local · código puro
+Zero
+entities · checklist_evidence 15 itens · speech_metrics · phase_map · keywords_frequency · products_gap
+E3
+Agentes de Julgamento Semântico
+9 agentes LLM · janelas de paralelismo
+7-12 calls/conversa
+Outputs A1-A9 com schemas validados
+E4
+Validação e Consolidação
+Local · código puro
+Zero
+Objeto consolidado com source e confidence por campo
+E5
+Persistência Estruturada
+SQL
+Zero
+15 tabelas relacionais com RLS
+E6
+Serving de Relatórios
+SQL Views
+Zero
+Views para dashboards · exportações · alertas · API
+3.1 E1 — Normalização e Parsing
+Função
+Algoritmo
+Output
+Detecção de marcadores explícitos
+Regex: 'Vendedor:' 'Cliente:' 'V:' 'C:' 'Atendente:'
+role=VENDEDOR|CLIENTE|TERCEIRO por turno
+Inferência posicional (sem marcadores)
+Posição alternada V,C,V,C · parágrafo como separador
+role inferido · confidence menor
+Normalização textual
+Expandir abreviações · remover ruídos · pontuação mínima
+text limpo por turno
+Score de confiança
+Marcadores explícitos→1.0; misto→0.6-0.9; sem marcadores→0.4-0.6
+confidence_score por transcrição
+Flag de revisão manual
+confidence < 0.6 → manual_review=true · role errado invalida checklist inteiro
+manual_review boolean no registro
+Timestamps
+word-level timestamps do Whisper se disponível; senão estimar por char_count
+char_start, char_end por turno
+3.2 E2 — Extração Determinística (máximo processamento local)
+Quanto mais a E2 extrair corretamente, menos contexto os agentes precisam processar e menor o risco de alucinação. Cada dimensão abaixo é resolvida sem nenhuma chamada LLM.
+Dimensão extraída
+Método
+Output
+Produtos Zeiss mencionados
+Dicionário product_catalog.json · variações linguísticas por produto
+entities.products[] com turn_id e role
+Preços e valores
+Regex R$\d+ · numerais extensos · padrões de desconto
+entities.prices[] · discount_pct estimado
+Marcas e concorrentes
+Dicionário fixo: Essilor, Varilux, Hoya, Kodak, Nikon, Shamir, Seiko, Rodenstock
+entities.competitors[] com turn_id
+Perguntas abertas vs fechadas
+Turnos VENDEDOR terminando em '?' · ≥5 palavras → open
+open_questions_count · closed_questions_count
+Ratio de fala
+Tokens VENDEDOR / total tokens
+seller_talk_ratio · client_talk_ratio
+Interrupções
+Turno < 3 tokens após turno longo · heurística posicional
+interruptions_detected count
+Segmentação de fases
+Padrões de turno + entidades → Recepção · Anamnese · Produto · Negociação · Fechamento
+phase_map[] com start_turn/end_turn por fase
+Keywords mais frequentes
+Contagem top-30 palavras não-stopword por role
+keywords_frequency{} por role
+Checklist 15 itens determinísticos
+Dictionary match com janela e role (checklist_zeiss_v6.json)
+checklist_evidence[] com verdict e turn_id
+Gap produtos pedidos vs apresentados
+Cruzamento client_mentioned × seller_presented das entities
+products_requested[] · products_shown[] · gap[]
+Tempo por fase
+char_count × fator de velocidade estimada
+phases[].duration_estimate
+Elogios por keyword
+Dicionário de expressões positivas por role cliente
+entities.positive_signals[]
+3.3 E3 — Janelas de Paralelismo dos 9 Agentes
+Ordem
+Agentes em paralelo
+Condição de entrada
+Bloqueia
+Pré-condição
+E1 + E2
+Transcrição recebida
+Todos os agentes dependem de E2 completo
+Janela A (simultâneos)
+A1 + A2 + A4 + A5
+E2 completo
+A3 depende de A2 · A6 depende de A5
+Janela B (após Janela A)
+A3 + A6
+A2 completo (A3 usa objeções) · A5 completo (A6 usa perfil)
+A7 depende de todos A1-A6
+Sequencial
+A7
+A1+A2+A3+A4+A5+A6 completos
+E4 validação
+Sequencial
+A9 (embedding local)
+A7 completo · critério exemplar validado
+pgvector store
+Sob demanda
+A8 (simulador)
+Requisição do usuário
+Independente do pipeline automático
+Benefício de latência: ~60% de redução na Janela A vs execução serial · ~30% adicional na Janela B. Timeout por agente: 15s · 3ª falha → INCONCLUSIVO automático sem quebrar o pipeline.
+4. Mapeamento Completo — 40 Features × Método × Agente × Campo de Output
+Para cada grupo de funcionalidades: método de resolução (local ou LLM), agente responsável quando LLM necessário, campo exato no output do agente linkado à feature, tabela de persistência, e fase do plano. Itens marcados CRM-DEPENDENT retornam null até integração da Fase 5. Itens marcados ÁUDIO requerem análise de features acústicas implementada na Fase 4.
+# 1 · CAPTURA E GESTÃO DE ÁUDIO
+Campo
+Valor
+Método de resolução
+INFRAESTRUTURA · Mobile app · Storage
+Agente responsável
+Sem agente LLM · infraestrutura de captura e gestão
+Campos de output linkados
+Nenhum campo LLM — metadados produzidos aqui (store_id, seller_id, mission_id, timestamp) são consumidos por todos os agentes como contexto
+Tabela de persistência
+audio_recordings · missions · devices · audit_observations (anotações #1.9)
+Fase
+1 (upload existente) · 3 (missões, anotações) · 6 (mobile, QR Code, dispositivos)
+#
+Item
+Método
+Fase
+1.1
+Gravação de áudio
+Mobile app (escopo separado)
+6
+1.2
+Upload manual de arquivos
+EXISTENTE
+—
+1.3
+Ativação/desativação via app
+Mobile app
+6
+1.4
+Sincronização automática com nuvem
+EXISTENTE (Supabase Storage)
+—
+1.5
+Criação de missões (campanhas)
+SQL · tabela missions
+3
+1.6
+Metadata (loja, vendedor, data, horário, tipo missão)
+EXISTENTE
+—
+1.7
+QR Code para iniciar gravação
+UI + qr_code_sessions
+6
+1.8
+Marcação de pausas durante gravação
+Mobile app · áudio
+6
+1.9
+Anotações manuais durante gravação
+audit_observations · campo in_session=true
+3
+1.10
+Gestão de dispositivos (bateria, espaço, conectividade)
+UI + device_registry
+6
+# 2 · PROCESSAMENTO DE ÁUDIO
+Campo
+Valor
+Método de resolução
+DETERMINÍSTICO · E1 + E2 + pré-processamento local de áudio
+Agente responsável
+E1 (parser) + E2 (extração) · sem agente LLM
+Campos de output linkados
+turns[].role · turns[].text · turns[].char_start/end · conversation_structure.phases[] · confidence_score · quality_flag
+Tabela de persistência
+conversation_turns · audio_metadata
+Fase
+1 (E1+E2 parser) · 2 (pré-processamento de áudio: VAD, SNR, diarização)
+100% determinístico. O único risco é role assignment incorreto em transcrições sem marcadores explícitos — tratado pelo flag manual_review quando confidence < 0.6. Itens 2.4-2.8 (limpeza, qualidade, silêncios) requerem pré-processamento de áudio local com librosa/WebRTC VAD antes do Whisper.
+#
+Item
+Método local
+Fase
+2.1
+Transcrição áudio→texto
+EXISTENTE (Whisper/Gemini)
+—
+2.2
+Identificação de falantes (diarização)
+E1 parser · regex + heurística posicional
+1
+2.3
+Timestamps por fala
+E1 · word-level timestamps do Whisper
+1
+2.4
+Detecção de silêncios e pausas longas
+Pré-processamento local · WebRTC VAD · silêncio > threshold
+2
+2.5
+Limpeza de ruídos de fundo
+Pré-processamento local · noisereduce
+2
+2.6
+Filtragem de conversas paralelas
+Pré-processamento local · pyannote diarização
+2
+2.7
+Remoção de trechos não relacionados
+Pré-processamento · VAD + pausa longa
+2
+2.8
+Detecção de qualidade do áudio
+Pré-processamento · SNR estimado · quality_warning flag
+2
+2.9
+Segmentação automática em fases
+E2 · padrões de turno + entidades detectadas
+1-2
+2.10
+Detecção de idioma
+EXISTENTE (Whisper retorna language automaticamente)
+—
+# 3 · ANÁLISE SEMÂNTICA E NLP — HÍBRIDO
+Campo
+Valor
+Método de resolução
+HÍBRIDO · E2 (entidades, keywords, ratio, perguntas) + A2 (objeções) + A3 (gatilhos, urgência) + A4 (sentimento, emoções)
+Agente responsável
+Agente 2 + Agente 3 + Agente 4 · cada sub-feature com método específico
+Campos de output linkados
+nlp_analysis.entities · .sentiment · .emotions_detected · .keywords_frequency · .buy_triggers_detected · .urgency_detected · speaker_inference.seller_talk_ratio · .open_questions_by_seller · objections[] · conversation_heatmap[]
+Tabela de persistência
+conversation_analysis (JSONB nlp_analysis) · conversation_entities · objections
+Fase
+1-2
+#
+Item
+Método
+LLM?
+Fase
+3.1
+Extração de entidades: produtos, marcas, preços
+E2 LOCAL · dicionário + regex
+Não
+1-2
+3.2
+Detecção de objeções
+A2 LLM · taxonomia 9 tipos
+Sim
+2
+3.3
+Identificação de elogios e reclamações
+E2 LOCAL (keywords elogio) + A4 (intensity negativa alta)
+Parcial
+2
+3.4
+Análise de sentimento por trecho
+A4 LLM · 1 call por fase · não full-text
+Sim
+2
+3.5
+Detecção de emoções
+A4 LLM · 8 emoções fechadas por fase
+Sim
+2
+3.6
+Identificação de tópicos emergentes
+SQL LOCAL · keywords_frequency com janela temporal
+Não
+3
+3.7
+Palavras-chave mais frequentes
+E2 LOCAL · contagem top-30 por role
+Não
+1-2
+3.8
+Detecção de menção a concorrentes
+E2 LOCAL · dicionário · A7 analisa contexto
+Parcial
+2
+3.9
+Identificação de gatilhos de compra
+A3 LLM · buy_triggers_detected[]
+Sim
+2
+3.10
+Detecção de urgência
+A3 · proxy LOCAL de keywords primeiro + LLM confirma
+Parcial
+2
+3.11
+Barreiras à compra (além de objeções explícitas)
+A2 (objeções) + A6 (implicit_needs) + A5 (resistência perfil)
+Sim
+2
+3.12
+Análise de tom de voz (confiança, insegurança)
+ÁUDIO · pitch + energia de voz · librosa local
+Não (local)
+4
+3.13
+Perguntas feitas pelo cliente vs vendedor
+E2 LOCAL · contagem por role
+Não
+1-2
+3.14
+Ratio de tempo de fala vendedor/cliente
+E2 LOCAL · token count por role
+Não
+1-2
+3.15
+Detecção de interrupções
+E2 LOCAL · heurística posicional
+Não
+1-2
+# 4 · CONSTRUTOR DE PROMPTS PERSONALIZADOS
+Campo
+Valor
+Método de resolução
+UI + SQL · construtor de análises customizadas sobre os 9 agentes configuráveis
+Agente responsável
+Sem agente LLM dedicado · usa agentes existentes com prompts parametrizados
+Campos de output linkados
+Nenhum campo LLM direto — prompts criados aqui passam pelos agentes existentes como contexto adicional
+Tabela de persistência
+custom_prompts · prompt_versions · analysis_triggers
+Fase
+5
+#
+Item
+Método
+Fase
+4.1
+Interface visual para análises customizadas
+UI sobre os 9 agentes configuráveis
+5
+4.2
+Editor de texto para prompts
+UI · Monaco editor
+5
+4.3
+Biblioteca de variáveis inseríveis
+UI · variáveis do schema disponíveis
+5
+4.4
+Seleção de dados de contexto a incluir
+UI · checkboxes sobre outputs dos agentes
+5
+4.5
+Configuração de formato de saída
+UI · JSON | texto | tabela
+5
+4.6
+Editor de schema JSON para saídas estruturadas
+UI · JSON schema editor
+5
+4.7
+Testador de prompt com áudio de exemplo
+UI + execução no pipeline
+5
+4.8
+Versionamento de prompts
+SQL · prompt_versions com changelog
+5
+4.9
+Duplicação de prompts existentes
+UI · clone com novo id
+5
+4.10
+Importação/exportação de prompts
+JSON file I/O
+5
+4.11
+Biblioteca de templates pré-prontos
+SQL · 5+ templates base documentados
+5
+4.12
+Marketplace de análises compartilhadas
+Fase 6 · T6.4
+6
+4.13
+Configuração de quando executar (sempre/só venda/agendado)
+SQL · tabela analysis_triggers
+5
+4.14
+Configuração de prioridade de execução
+SQL · analysis_triggers.priority
+5
+4.15
+Agendamento de análises
+Supabase Edge Function + cron
+5
+# 5 · CHECKLIST ZEISS V.6 E CHECKLIST GENÉRICO
+Campo
+Valor
+Método de resolução
+HÍBRIDO · E2 (15 itens determinísticos) + A1 LLM (7 itens ambíguos)
+Agente responsável
+E2 determinístico (15/22) + Agente 1 (7/22)
+Campos de output linkados
+checklist.items[].verdict · .confidence · .evidence · .turn_id · .reasoning · checklist.total_score
+Tabela de persistência
+checklist_results
+Fase
+1-2 (Zeiss) · 5 (genérico personalizável)
+Os 15 itens determinísticos são resolvidos pela E2 com dictionary matching contra checklist_zeiss_v6.json. Os 7 itens ambíguos vão ao Agente 1. O merge é feito por código para compor o checklist completo. O score total ponderado é calculado por SQL.
+Item do Checklist
+Tipo
+Método
+Keywords gatilho / critério LLM
+cumprimentou_cliente
+Determinístico
+E2
+'boa tarde' · 'bem-vindo' · 'olá' · 'bom dia' · Turnos 0-3 · VENDEDOR
+perguntou_conhece_zeiss
+Determinístico
+E2
+'conhece a zeiss' · 'conhece a marca' · 'já ouviu falar da zeiss' · VENDEDOR
+pegou_oculos_lensometro
+Determinístico
+E2
+'lensômetro' · 'medir seus óculos' · 'verificar a graduação' · VENDEDOR
+limpou_lens_wipes
+Determinístico
+E2
+'lens wipe' · 'paninho' · 'limpei' · 'limpeza dos óculos' · VENDEDOR
+usou_ultrassonico
+Determinístico
+E2
+'ultrassônico' · 'ultrassom' · 'aparelho de limpeza' · qualquer role
+perguntou_profissao
+Determinístico
+E2
+'profissão' · 'trabalha' · 'o que você faz' · 'sua área' · VENDEDOR
+perguntou_eletronicos
+Determinístico
+E2
+'computador' · 'celular' · 'tela' · 'eletrônico' · 'digital' · VENDEDOR
+perguntou_esportes
+Determinístico
+E2
+'esporte' · 'academia' · 'corrida' · 'tênis' · 'bicicleta' · VENDEDOR
+perguntou_dirige
+Determinístico
+E2
+'dirige' · 'carro' · 'volante' · 'noite ao volante' · VENDEDOR
+perguntou_sensibilidade_luz
+Determinístico
+E2
+'luz' · 'sensibilidade' · 'ofuscamento' · 'claridade' · 'sol' · VENDEDOR
+mencionou_iterminal_visufit
+Determinístico
+E2
+'iTerminal' · 'Visufit' · 'equipamento de medição' · 'medição digital' · VENDEDOR
+solicitou_telefone_email
+Determinístico
+E2
+'telefone' · 'WhatsApp' · 'e-mail' · 'contato' · 'posso anotar' · VENDEDOR
+ofertou_photofusion_antivirus
+Determinístico
+E2
+'Photofusion' · 'fotossensível' · 'antirrisco' · 'antirreflexo' · VENDEDOR
+mencionou_zeiss_clareza
+Determinístico
+E2
+'lente Zeiss' · 'tecnologia Zeiss' · 'qualidade Zeiss' · 'Zeiss é' · VENDEDOR
+usou_app_visuconsult
+Determinístico
+E2
+'VisuConsult' · 'aplicativo' · 'app da Zeiss' · qualquer role
+explicou_zeiss_com_clareza
+LLM — A1
+A1
+Avaliação qualitativa do conteúdo explicado · não só presença de keyword
+realizou_medicao_com_equipamento
+LLM — A1
+A1
+Pode ocorrer sem comentário verbal · inferência por contexto
+ofertou_lente_maior_valor_primeiro
+LLM — A1
+A1
+Requer análise de sequência de apresentação de produtos
+demonstrou_interesse_genuino
+LLM — A1
+A1
+Padrão conversacional: escuta ativa, perguntas de continuidade
+utilizou_recurso_visual
+LLM — A1
+A1
+Tablet/demotool pode ser usado sem menção verbal — dêiticos
+consultou_tabela_precos
+LLM — A1
+A1
+Pode ser feito silenciosamente · inferência por pausa + valor confirmado
+contato_pos_visita_7_dias
+NOT_IN_TRANSCRIPT sempre
+A1
+Dado externo · NUNCA inferir como SIM pela transcrição
+# 6-10 · MÉTRICAS DE VENDAS, OPORTUNIDADES, TENDÊNCIAS, TEMPO
+Feature
+Método
+Nível
+Tabela/View
+Nota
+#6.1 ROI por conversa
+SQL · final_value × margin − seller_cost_hour × duration
+1
+sales_metrics · vw_vendor_performance
+Requer config de taxa horária por vendedor
+#6.2 Custo por conversa
+SQL · seller_cost_hour × duration
+1
+sales_metrics
+Configurável em settings
+#6.3 Taxa de conversão
+SQL · sale_completed GROUP BY seller_id
+1
+vw_vendor_performance
+—
+#6.4-6.10 Ticket médio (múltiplos recortes)
+SQL · GROUP BY vendedor/loja/dia/horário/duração
+1
+vw_vendor_performance
+Aritmética pura
+#6.11 Margem por conversa
+SQL · product_catalog.margin × produtos_vendidos
+1
+sales_metrics
+Requer campo margin no product_catalog.json
+#6.12 Desconto médio concedido
+SQL · AVG(discount_pct)
+1
+sales_metrics
+discount_pct da E2
+#6.13 Eficiência (valor/minuto)
+SQL · final_value / duration
+1
+sales_metrics
+Aritmética pura
+#6.14-6.15 Tempo médio total e por fase
+SQL · AVG(duration_estimate) por fase
+1
+conversation_structure.phases
+—
+#6.16-6.17 Comparativo e evolução temporal
+SQL · vw_vendor_performance com janela temporal
+1
+vw_vendor_performance
+—
+#7.1.1-5 Cross-sell não realizado
+E2 det (gap=subtração de conjuntos) + A6 (qualificação) + SQL (probabilidade)
+0+3
+lost_opportunities
+total_estimated_value_loss calculado por código
+#7.2.1-5 Up-sell possível
+E2 (gap hierarquia do catálogo) + A5 (sensibilidade) + A6 (delta)
+0+3
+lost_opportunities
+delta calculado por código
+#7.3.1 Interesse não ofertado
+E2 · products_requested_not_shown
+0
+lost_opportunities
+Determinístico
+#7.3.2 Necessidades implícitas
+A6 LLM · implicit_needs_not_addressed
+3
+lost_opportunities
+Única parte LLM no A6
+#7.3.3 Promoções vigentes não mencionadas
+LOCAL · tabela promotions
+1
+promotions
+Nova tabela com vigência
+#7.3.4 Serviços adicionais não oferecidos
+LOCAL · tabela services
+1
+services
+Nova tabela de serviços
+#7.3.5 Programas de fidelidade não apresentados
+LOCAL · tabela loyalty_programs
+1
+loyalty_programs
+Nova tabela
+#8.1-4 Gap produtos pedidos vs apresentados
+E2 LOCAL · cruzamento determinístico
+0
+lost_opportunities
+Operação de conjunto
+#8.5 Produto pedido sem estoque
+LOCAL · integração ERP/PDV
+1
+Integração Fase 5
+CRM/PDV-DEPENDENT
+#8.6 Produto desconhecido pelo vendedor
+A6 LLM · flag vendor_knowledge_gap
+3
+lost_opportunities
+Inferência por contexto
+#8.7 Produtos mencionados casualmente
+A6 LLM · implicit_needs
+3
+lost_opportunities
+—
+#8.8 Correlação apresentados vs comprados
+SQL · products_shown × sale_completed
+1
+Integração PDV
+CRM/PDV-DEPENDENT
+#9.1-3 Padrões horário, dia semana, sazonalidade
+SQL · GROUP BY + janela temporal
+1
+vw_behavioral_trends
+—
+#9.4-6 Evolução objeções, produtos em alta/baixa
+SQL · vw_objection_trends + vw_product_trends
+1
+Views SQL
+Tendência temporal
+#9.7 Mudanças no perfil de cliente ao longo do tempo
+SQL · GROUP BY period sobre archetype serializado
+1
+vw_behavioral_trends
+—
+#9.8-9 Tendências de duração e ticket
+SQL · janela temporal
+1
+vw_behavioral_trends
+—
+#9.10 Correlação com eventos externos
+SQL + feed externo configurável
+1
+Fase 5 · fonte externa
+Clima, feriados, campanhas
+#9.11 Evolução de sentimento ao longo do tempo
+SQL · AVG(intensity) por fase × período
+1
+vw_sentiment_trends
+—
+#9.12 Padrões de recompra
+CRM-DEPENDENT · purchase_type=returning + histórico
+1
+Integração CRM Fase 5
+—
+#10.1-6 Duração total, por fase, correlações
+SQL · conversation_structure.phases
+1
+vw_timing_analysis
+Aritmética pura
+#10.7 Tempo até primeira menção de produto
+SQL · MIN(turn_id) WHERE entity_type=product
+0
+conversation_entities
+—
+#10.8 Tempo até apresentação de preço
+SQL · MIN(turn_id) WHERE entity_type=price
+0
+conversation_entities
+—
+#10.9 Tempo de decisão do cliente
+SQL · turn_id(fechamento) − turn_id(último preço)
+1
+conversation_structure
+Estimativa via phase_map
+#10.10 Conversas curtas com alta conversão
+SQL · duração < p25 AND sale_completed=true
+1
+vw_timing_analysis
+Outlier analysis por percentil
+# 11-16 · PREFERÊNCIAS, OBSERVAÇÕES, CRÍTICAS VELADAS, INTENÇÃO, PERFIL PSICOLÓGICO E PERFIL DE CLIENTE
+Feature
+Método
+LLM?
+Campo output
+Nota
+#11.1 Temas de maior engajamento
+A5 + E2 keywords × coherence_score A4
+Sim
+preferred_communication_style · keywords_frequency
+—
+#11.2 Características de produto mais valorizadas
+A5 + A6 · engagement por produto
+Sim
+psychological_profile · implicit_needs
+—
+#11.3 Estilo de comunicação preferido
+A5 LLM
+Sim
+preferred_communication_style
+—
+#11.4 Preferência por demonstração visual vs verbal
+A5 LLM · inferência por turnos
+Sim
+Integrado em psychological_profile
+—
+#11.5 Tópicos de interesse positivo
+A4 (coherence alto) + E2 keywords
+Sim
+phase_critical_event + keywords_frequency
+Cruzamento fase de alta coherence + keywords
+#11.6 Tópicos que geram objeções
+A2 tipo + produto mencionado no mesmo turno
+Sim
+objections[].objection_text + entities.products
+—
+#11.7 Canais de comunicação preferidos
+A5 + follow_up_records histórico
+Sim
+preferred_communication_style
+—
+#11.8 Horários preferidos de contato
+CRM-DEPENDENT + follow_up_records
+—
+follow_up_records
+Histórico de retorno
+#12.1 Campo livre do auditor
+audit_observations.free_text
+Não
+audit_observations
+MANUAL
+#12.2 Fotos da loja
+audit_observations.photos_urls[]
+Não
+audit_observations
+Upload para Storage
+#12.3 Checklist de aspectos físicos
+audit_observations.physical_checklist JSONB
+Não
+audit_observations
+MANUAL · iluminação, temperatura, organização
+#12.4-12.8 Apresentação vendedor, atmosfera, staff, merchandising, concorrência visível
+audit_observations.* campos específicos
+Não
+audit_observations
+MANUAL
+#13.1 Linguagem indireta negativa
+A4 (intensity baixa) + A7 hidden_criticisms
+Sim
+hidden_criticisms[].type · .description · .severity
+A4 detecta · A7 consolida
+#13.2 Tom sarcástico
+A4 LLM · frustração + coherence baixo
+Sim
+hidden_criticisms[].type=SARCASMO
+—
+#13.3 Comparações desfavoráveis sutis
+A2 (COMPARACAO_CONCORRENTE) + A7
+Sim
+hidden_criticisms + competitive_analysis
+—
+#13.4 Desculpas educadas para não comprar
+A2 (PRECO_SEM_CONTEXTO + URGENCIA_BAIXA) + A4
+Sim
+objections[].objection_type + hidden_criticisms
+—
+#13.5 Sinais de desconforto não verbalizados
+ÁUDIO · prosódia · pitch e energia de voz
+Não (local áudio)
+audio_features.discomfort_signal
+Fase 4 · librosa local
+#13.6 Silêncios significativos após proposta
+ÁUDIO · VAD + timestamps · silêncio > 3s após pergunta
+Não (local áudio)
+audio_features.significant_silence
+Fase 4
+#13.7 Mudança de tom durante conversa
+A4 LLM · delta intensity entre fases
+Sim
+phase_critical_event · coherence_score delta
+—
+#13.8 Respostas evasivas
+A2 (efficacy=NAO_CONTORNOU) + A4 (hesitação)
+Sim
+objections[].efficacy + hidden_criticisms
+—
+#14.1-14.8 Análise de intenção completa
+A3 LLM · CoT 4 dimensões
+Sim
+purchase_intent.* todos os campos
+Ver Seção 5 A3
+#15.1-15.9 Perfil psicológico completo
+A5 LLM · arquétipos fechados
+Sim
+psychological_profile.* todos os campos
+Ver Seção 5 A5
+#15.10 Necessidade de validação social
+A5 · arquétipo SOCIAL + A2 PRECISA_CONSULTAR_TERCEIRO
+Sim
+archetype=SOCIAL + objection_type=PRECISA_CONSULTAR
+—
+#16.1 Segmentação demográfica inferida
+A5 · is_inferred=true obrigatório em todos os campos
+Sim
+customer_profile.* com flag is_inferred
+Disclaimer obrigatório na UI
+#16.2 Ocupação/profissão mencionada
+E2 LOCAL (perguntou_profissao detecta resposta)
+Não
+entities.profession_mentioned
+—
+#16.3 Frequência de compra
+CRM-DEPENDENT · purchase_type proxy apenas
+—
+customer_profile.purchase_type (proxy)
+Frequência real requer CRM
+#16.4 Poder aquisitivo estimado
+A5 · estimated_purchasing_power
+Sim
+customer_profile.estimated_purchasing_power
+INFERIDO · disclaimer
+#16.5-16.9 Padrão gasto, LTV, canais, histórico, sazonalidade
+CRM-DEPENDENT
+—
+null + CRM_REQUIRED flag
+Requer integração CRM Fase 5
+#16.10 Sensibilidade a promoções
+A5 · price_sensitivity
+Sim
+psychological_profile.price_sensitivity
+—
+# 17-22 · BENCHMARKING, BIBLIOTECA, OBJEÇÕES, CONFORMIDADE, TREINAMENTO, DASHBOARDS
+Feature
+Método
+LLM?
+Tabela/View
+Fase
+#17.1-17.8 Benchmarking completo
+SQL · vw_vendor_performance · GROUP BY · ranking
+Não
+vw_vendor_performance · vw_store_comparison
+3
+#18.1 Repositório de conversas exemplares
+A9 · pgvector · critério: score>80 AND intent>70
+Não (embedding local)
+conversation_embeddings
+4
+#18.2 Busca por situação específica
+A9 · query em linguagem natural → cosine similarity
+Não (local)
+pgvector similarity search
+4
+#18.3 Áudios de referência por habilidade
+SQL + skill_tags[] na tabela conversation_embeddings
+Não
+conversation_embeddings.skill_tags
+4
+#18.4 Transcrições de melhores abordagens
+SQL · resultado da busca A9 com link para conversa
+Não
+conversation_embeddings · conversation_turns
+4
+#18.5 Argumentos que mais convertem
+SQL · objections WHERE efficacy=CONTORNOU AND sale=true
+Não
+vw_objection_efficacy
+3
+#18.6 Respostas eficazes por tipo de objeção
+SQL · GROUP BY objection_type WHERE efficacy=CONTORNOU
+Não
+vw_objection_efficacy
+3
+#18.7 Scripts que funcionam vs não
+SQL · checklist_score × sale_completed por item
+Não
+vw_checklist_conversion
+3
+#18.8 Correlação técnicas × taxa de sucesso
+SQL · sales_techniques_detected × sale_completed
+Não
+vw_technique_success
+3
+#19.1-19.8 Objeções e respostas completo
+A2 + SQL
+Sim
+objections · vw_objection_efficacy
+2-3
+#20.1-20.8 Conformidade completa
+A1 + A7 · compliance.*
+Sim
+conversation_analysis (compliance JSONB)
+2
+#21.1 Gaps por vendedor
+SQL · checklist WHERE verdict=NAO GROUP BY seller_id
+Não
+vw_checklist_summary
+3
+#21.2 Trilhas de aprendizado
+SQL · tabela learning_tracks
+Não
+learning_tracks
+4
+#21.3 Sugestão de áudios para gap
+A9 · busca semântica por tipo de gap
+Não (local)
+pgvector
+4
+#21.4 Planos de ação individualizados
+A7 · training_recommendation
+Sim
+vendor_training_plans
+2
+#21.5 Acompanhamento de evolução
+SQL · checklist_results por seller_id × período
+Não
+vw_vendor_evolution
+3
+#21.6 Gamificação (pontos, badges, ranking)
+SQL · triggers Supabase
+Não
+gamification
+6
+#21.7 Simulador de conversas com IA
+A8
+Sim
+simulation_sessions
+4
+#21.8 Quiz automático
+SQL · perguntas geradas de conversas exemplares
+Não
+quiz_questions
+5
+#21.9 Certificações internas
+SQL · critérios configuráveis em certifications
+Não
+certifications
+6
+#22.1-22.3 Dashboards executivo/gerencial/operacional
+SQL views + Chart.js
+Não
+Views SQL
+3
+#22.4 Construtor de dashboard drag-and-drop
+UI · biblioteca de widgets
+Não
+dashboard_layouts
+6
+#22.5-22.7 Gráficos · filtros · exportação
+Chart.js + SQL + Canvas export
+Não
+Views SQL
+3
+#22.8 Agendamento de relatórios por email
+Supabase Edge Function + cron
+Não
+email_schedules
+5
+#22.9 Alertas configuráveis por threshold
+Supabase Realtime + alert_rules
+Não
+alert_rules
+5
+# 23-40 · INTEGRAÇÕES, CATÁLOGO, LOJAS, USUÁRIOS, PLAYER, EXPORTAÇÃO, ANÁLISES AVANÇADAS
+Feature
+Método
+LLM?
+Fase
+Nota
+#23.1 CRM (Salesforce, HubSpot, RD Station, Pipedrive)
+Webhooks + OAuth · crm_integrations
+Não
+5
+Desbloqueia itens CRM-DEPENDENT
+#23.2 ERP (TOTVS, SAP, Oracle)
+API REST bidirecional
+Não
+5
+Mapeamento específico por ERP
+#23.3 PDV/Sistema de vendas
+Webhook · sale_completed real
+Não
+5
+Fecha item 8.8
+#23.4 E-commerce
+Webhook de pedido · correlação com conversa
+Não
+6
+Omnichannel
+#23.5 WhatsApp Business
+API WA · follow_up_records
+Não
+5
+Follow-up registrado automaticamente
+#23.6 Integração com estoque
+API estoque · produtos disponíveis
+Não
+5
+Fecha item 8.5
+#23.7 Preços e promoções
+Sincronização tabela promotions
+Não
+5
+Fecha item 7.3.3
+#23.8-23.10 Webhooks, API REST, CSV/Excel
+Existente + Fase 6
+Não
+3-6
+—
+#24.1-24.4 Cadastro, categorização, versões, complementares
+UI + product_catalog
+Não
+5
+—
+#24.5 Margem por produto
+product_catalog.json · campo margin
+Não
+3
+Requer campo margin no JSON
+#24.6-24.7 Keywords e scripts por produto
+product_catalog.json
+Não
+1
+Nos JSONs de ontologia
+#24.8 Histórico de performance por produto
+SQL · vw_product_trends
+Não
+3
+—
+#25.1-25.6 Gestão de lojas e territórios completa
+SQL · hierarquia region>city>store · RLS
+Não
+6
+5 perfis de acesso
+#26.1-26.6 Usuários e permissões (5 perfis)
+Supabase Auth + RLS granular
+Não
+3
+Admin · Gerente Regional · Gerente Loja · Vendedor · Auditor
+#27.1-27.5 Player de áudio sincronizado
+UI · phase_map timestamps
+Não
+3
+Timeline de fases · sync transcrição
+#27.6 Compartilhamento de trecho
+UI · URL com ?t=SECONDS
+Não
+4
+—
+#27.7 Download de áudio
+EXISTENTE
+Não
+—
+—
+#28.1-28.6 Transcrição interativa com highlights
+UI · E2 entities com turn_id
+Não
+3
+—
+#28.7 Anotações em trechos
+UI · transcript_annotations
+Não
+4
+—
+#28.8 Edição manual de transcrição
+UI · UPDATE conversation_turns · flag edited=true
+Não
+3
+—
+#29.1 PDF da análise
+Edge Function + PDF generator
+Não
+3
+summary_narrative + checklist + heatmap
+#29.2 CSV/Excel
+EXISTENTE + ampliação
+Não
+3
+—
+#29.3 Link compartilhável
+UUID de sessão com expiração
+Não
+4
+—
+#29.4 Envio por email
+Email provider via Edge Function
+Não
+5
+—
+#29.5 PowerPoint automático
+PPTX generator
+Não
+6
+Slides por seção de análise
+#29.6 Impressão
+CSS de impressão · browser print
+Não
+3
+Sem backend
+#30.1 Alertas em tempo real ao vivo
+Supabase Realtime + WebSocket · pipeline streaming
+Não
+6
+Alta complexidade
+#30.2-30.7 Alertas e notificações configuráveis
+Supabase Realtime + alert_rules
+Não
+5
+Compliance, oportunidade, meta, padrão
+#31.1-31.7 Análise competitiva completa
+E2 (detecção) + A7 (análise) + SQL (frequência)
+Sim
+2-3
+competitive_analysis.* todos os campos
+#32.1-32.7 Linguagem e comunicação completa
+A7 communication_analysis + E2
+Sim
+2
+communication_analysis.* todos os campos
+#33.1-33.6 Momentos críticos completo
+A3 + A4 + A7 · critical_moments[]
+Sim
+2
+5 tipos: TURNAROUND · PERDA · OBJECTION · DECISAO · ENGAJAMENTO
+#34.1-34.5 Follow-up completo
+A7 (recomendação) + follow_up_records (registro) + SQL (análise)
+Sim
+2-3
+—
+#35.1-35.5 Simulador completo
+A8 · progressão de dificuldade
+Sim
+4
+—
+#36.1-36.4 Marketplace de análises
+Fase 6
+Não
+6
+—
+#37.1-37.5 Config de modelo de IA
+EXISTENTE + settings expandido
+Não
+3
+Multi-provider · fallback automático
+#38.1-38.7 Compliance e privacidade LGPD
+Fase 6
+Não
+6
+Anonimização · consentimento · exportação
+#39.1-39.5 Análise preditiva completa
+A3 (intent) + A5 (perfil) + SQL histórico
+Sim
+2-5
+predictive.* campos gerados em Fase 5
+#40.1-40.4 Heatmap de conversa completo
+A4 (por fase) + código (montagem) + Chart.js
+Sim
+2-3
+conversation_heatmap[] montado por código
+5. Especificação Completa dos 9 Agentes
+Cada agente é especificado com: (1) features cobertas com campos linkados, (2) sub-etapas explicitando o que executa local ANTES de qualquer LLM, (3) schema de output completo com tipo e constraint por campo, (4) regras de validação pós-LLM aplicadas por código.
+AGENTE 1 · CONFORMIDADE NO CHECKLIST — 7 ITENS AMBÍGUOS
+Features cobertas com campos linkados:
+Feature #
+Nome
+Campos produzidos
+#5
+Checklist Zeiss V.6 — 7 itens ambíguos
+checklist.items[requires_llm=true]: verdict · confidence · evidence · turn_id · reasoning
+#20
+Análise de conformidade — mandatory_script_followed
+compliance.mandatory_script_followed via proxy: checklist.total_score > 70
+Sub-etapas — LOCAL antes do LLM:
+Sub-etapa
+Onde executa
+O que faz
+Filtrar turnos relevantes por janela e role
+LOCAL (E2 output)
+Seleciona turns ±3 por item · role específico · NUNCA envia transcrição inteira
+Classificar os 7 itens ambíguos
+LLM (1 call com todos os 7 itens juntos)
+Emite verdict + confidence + evidence + reasoning por item
+Validar schema do output
+LOCAL (código)
+Rebaixa confidence<0.4 para INCONCLUSIVO · força NOT_IN_TRANSCRIPT em contato_pos_visita
+Re-execução em falha de schema
+LOCAL (orquestrador)
+Máx 2 tentativas · 3ª falha → INCONCLUSIVO automático com evidence='schema_validation_failed'
+Merge com E2 (15 itens det.)
+LOCAL (código)
+Compõe checklist completo 22 itens · calcula total_score ponderado por peso do JSON
+Schema de output completo:
+Campo
+Tipo
+Feature servida
+Constraint
+items[].item_key
+string
+#5
+Chave do item do checklist_zeiss_v6.json
+items[].verdict
+enum
+#5
+SIM | NÃO | INCONCLUSIVO | NOT_IN_TRANSCRIPT
+items[].confidence
+number 0-1
+#5
+confidence < 0.4 com SIM/NÃO → rebaixar para INCONCLUSIVO por código
+items[].evidence
+string
+#5
+Citação ou descrição · obrigatório se verdict ≠ INCONCLUSIVO · nunca string vazia
+items[].turn_id
+int|null
+#5
+turn_id válido do array recebido · inválido → null
+items[].reasoning
+string
+#5
+Cadeia de raciocínio · 2-4 frases · obrigatório sempre
+Regra absoluta: contato_pos_visita_7_dias → sempre NOT_IN_TRANSCRIPT independentemente do output LLM. Esse item não é resolúvel por transcrição e o LLM não pode inferir como SIM.
+AGENTE 2 · CLASSIFICAÇÃO E TIPIFICAÇÃO DE OBJEÇÕES
+Features cobertas com campos linkados:
+Feature #
+Nome
+Campos produzidos
+#3
+Análise semântica — detecção de objeções
+objections[].objection_type · objection_text · turn_id
+#13
+Críticas veladas — objeções implícitas
+objections tipo PRECO_SEM_CONTEXTO · hidden_criticisms parcial
+#19
+Detecção de objeções e respostas
+objections[].vendor_response_text · efficacy · objection_resolved
+#33
+Momentos críticos — momento de objeção principal
+turn_id da objeção com maior impacto (input para A7)
+Sub-etapas — LOCAL antes do LLM:
+Sub-etapa
+Onde executa
+O que faz
+Detectar candidatos a objeção por keywords
+LOCAL (E2)
+Keywords de hesitação e negação filtram turnos do CLIENTE antes de enviar ao LLM
+Filtrar turnos candidatos por turn_id
+LOCAL
+Envia ao LLM apenas turns CLIENTE com sinal de objeção + T+1/T+2 do VENDEDOR
+Classificar tipo e eficácia
+LLM (1 call)
+9 tipos fechados · efficacy por objeção · turn_id de resposta do vendedor
+Validar taxonomia no output
+LOCAL (código)
+Rejeita tipo fora do enum · solicita re-execução com log de erro
+Calcular efficacy aggregation
+LOCAL (SQL)
+Taxa de sucesso por tipo e por vendedor — NUNCA pelo LLM
+Taxonomia fechada — 9 tipos:
+Tipo
+Definição canônica
+Sinal de falso positivo
+PRECO_ALTO
+Preço acima do esperado ou orçado pelo cliente
+Pergunta de preço sem julgamento não é objeção
+PRECO_SEM_CONTEXTO
+Hesitação genérica — 'vou pensar' sem articulação
+Seguido de pergunta de compra → não é objeção real
+PRECISA_CONSULTAR_TERCEIRO
+Deslocamento da decisão para cônjuge ou sócio
+Pode ser pretexto de PRECO_ALTO; registrar ambos se necessário
+JA_TEM_PRODUTO_SIMILAR
+Posse recente reduz urgência percebida
+Óculos antigos mencionados como problema ≠ esta categoria
+COMPARACAO_CONCORRENTE
+Menção de concorrente como referência desfavorável
+Menção neutra sem comparação de valor não qualifica
+QUALIDADE_QUESTIONADA
+Dúvida sobre durabilidade, eficácia ou procedência
+Perguntas técnicas sem ceticismo explícito não qualificam
+URGENCIA_BAIXA
+Ausência de necessidade imediata — visita exploratória
+Presente de terceiro pode parecer urgência baixa mas é distinto
+CONDICAO_PAGAMENTO
+Parcelamento, crédito, disponibilidade de pagamento
+Pergunta sobre preço total ≠ condição de pagamento
+DESCONFIANCA_MARCA
+Ceticismo específico sobre Zeiss
+Dúvida sobre produto específico ≠ desconfiança de marca
+Schema de output completo (array de objeções):
+Campo
+Tipo
+Feature servida
+Constraint
+objection_type
+enum
+#3 #19
+Um dos 9 tipos da taxonomia · sem variação tipográfica
+objection_text
+string
+#3 #19
+Citação do turno do cliente
+turn_id
+integer
+#33
+turn_id do turno do cliente onde objeção ocorre
+vendor_response_text
+string|null
+#19
+Turno do vendedor em T+1/T+2 · null se ausente
+efficacy
+enum
+#19
+CONTORNOU | NAO_CONTORNOU | PARCIAL | NO_RESPONSE
+phase
+string
+#3 #19
+Nome da fase onde a objeção ocorreu
+objection_resolved
+boolean
+#19
+True se resistência resolvida antes do fim da conversa
+AGENTE 3 · INTENÇÃO DE COMPRA COM CoT OBRIGATÓRIO
+Features cobertas com campos linkados:
+Feature #
+Nome
+Campos produzidos
+#3
+Análise semântica — gatilhos de compra, urgência
+buy_triggers_detected[] · urgency_detected · urgency_evidence
+#6
+Métricas de vendas — sale_completed proxy
+intent_score > 80 + buy_triggers como proxy de fechamento
+#14
+Análise de intenção de compra
+intent_score · intent_classification · dimension_scores · cot_reasoning
+#33
+Momentos críticos — momento de maior receptividade
+turn_id com peak de intent (input para A7)
+#39
+Análise preditiva — probabilidade de conversão
+intent_score como feature preditiva principal
+Framework de 4 Dimensões para o CoT:
+Dimensão
+Peso
+Sinais de intent ↑
+Sinais de intent ↓
+D1 · Urgência
+30%
+Deadline real, óculos quebrados, presente com data, visão comprometida
+'Só vim pesquisar', ausência de qualquer urgência verbalizada
+D2 · Engajamento
+30%
+Experimentou produto, pediu ver mais, perguntou personalização, tocou no produto
+Recusou experimentar, monossílabos, desinteresse em detalhes
+D3 · Redução de resistência
+25%
+Objeções contornadas (A2: efficacy=CONTORNOU), retomada de produto
+Objeções persistentes não resolvidas, saída abrupta
+D4 · Fechamento
+15%
+Perguntas de prazo, garantia, estoque, pagamento específico
+Ausência total de perguntas de fechamento após pitch completo
+Sub-etapas — LOCAL antes do LLM:
+Sub-etapa
+Onde executa
+O que faz
+Calcular proxy D1 — urgência por keywords
+LOCAL
+Detecta: óculos quebrados · data de evento · prescrição médica · prazo verbalizado
+Calcular proxy D2 — engajamento
+LOCAL
+Conta experimentações · perguntas de produto · coherence_score A4 de fases de produto
+Calcular proxy D3 — resistência
+LOCAL
+Lê objeções_resolved=false de A2 · conta objeções não resolvidas por tipo
+Calcular proxy D4 — fechamento
+LOCAL
+Detecta keywords: prazo · estoque · garantia · parcelamento · 'vou comprar'
+Arbitrar score final e CoT
+LLM (1 call)
+Recebe os 4 proxies calculados · emite score ponderado + cot_reasoning com 4 partes + buy_triggers
+Validar coerência score × classificação
+LOCAL (código)
+BROWSING:0-25 · PESQUISANDO:26-55 · PRONTO:56-80 · URGENTE:81-100 · inconsistência → flag
+Schema de output completo:
+Campo
+Tipo
+Feature servida
+Constraint
+intent_score
+number
+#14 #39
+0-100 · calibração: maioria entre 30-60 · >75 exige evidência múltipla
+intent_classification
+enum
+#14
+BROWSING | PESQUISANDO | PRONTO | URGENTE · coerente com range de score
+cot_reasoning
+string
+#14
+≥200 chars · estrutura de 4 partes D1/D2/D3/D4 obrigatória
+urgency_detected
+boolean
+#3 #14
+True se D1 com evidência clara e inequívoca
+urgency_evidence
+string|null
+#3 #14
+Citação do turno · null se urgency_detected=false
+buy_triggers_detected
+string[]
+#3 #6
+Sinais verbais de fechamento · array vazio válido
+dimension_scores
+object
+#14
+{ d1_urgency:0-100, d2_engagement:0-100, d3_resistance:0-100, d4_closing:0-100 }
+AGENTE 4 · HEATMAP DE SENTIMENTO POR FASES — LOOP POR FASE
+Features cobertas com campos linkados:
+Feature #
+Nome
+Campos produzidos
+#3
+Análise semântica — sentimento por trecho, emoções
+conversation_heatmap[].sentiment · dominant_emotion · intensity
+#11
+Preferências — tópicos de engajamento
+Fases com intensity alta = tópicos de maior engajamento do cliente
+#13
+Críticas veladas — mudança de tom, silêncios
+Queda de intensity intra-fase = sinal de crítica velada · phase_critical_event
+#33
+Momentos críticos — virada e desconexão
+Inflexões de intensity identificadas por fase (input para A7)
+#40
+Heatmap de conversa
+conversation_heatmap[] completo para visualização Chart.js
+Sub-etapas — LOCAL antes do LLM:
+Sub-etapa
+Onde executa
+O que faz
+Particionar turns[] por fase
+LOCAL (phase_map de E2)
+Divide array de turnos por fase antes de qualquer LLM · N fases = N calls
+Calcular proxy de intensidade por fase
+LOCAL
+Conta marcadores de hesitação · exclamações · perguntas · keywords de sentimento por fase
+Classificar emoção dominante por fase
+LLM (1 call POR FASE)
+8 emoções fechadas · sentimento separado VENDEDOR e CLIENTE · coherence_score · phase_critical_event
+Detectar mudança de tom e críticas veladas
+LLM (integrado na call de fase)
+Sarcasmo · evasão · queda de intensity entre fases consecutivas
+Montar conversation_heatmap[]
+LOCAL (código)
+Array construído a partir dos outputs de fase · segment_index, intensity, sentiment, phase, dominant_emotion · NUNCA pelo LLM
+Taxonomia de emoções (8 fechadas):
+Emoção
+Polo
+Manifestações linguísticas gatilho
+entusiasmo
+Positivo alto
+Exclamações, perguntas de aprofundamento espontâneas, comentários positivos não solicitados
+satisfação
+Positivo médio
+Concordância explícita, agradecimentos, ausência de resistência
+curiosidade
+Neutro/Positivo
+Perguntas abertas sem ceticismo, pedidos de mais informação
+neutro
+Neutro
+Monossílabos não negativos, seguir fluxo sem engajamento adicional
+hesitação
+Negativo leve
+'É...', 'hmm', 'vou pensar', uso de condicional, retomada de objeção
+dúvida
+Negativo médio
+Questionamentos sobre qualidade/valor, pedido de evidência, ceticismo
+frustração
+Negativo alto
+Interrupções, respostas curtas após argumentos longos, desengajamento
+pressa
+Negativo contextual
+'Preciso ir', truncamentos de turno, referências temporais de saída
+Schema de output por fase + heatmap agregado:
+Campo
+Tipo
+Feature servida
+Constraint
+phase
+string
+#40 #33
+Consistente com phase_map da E2
+client_sentiment.label
+enum
+#3 #40
+positive | neutral | negative
+client_sentiment.intensity
+number
+#3 #40
+0.0-1.0
+client_sentiment.dominant_emotion
+enum
+#3 #13 #33
+Da taxonomia fechada de 8 emoções
+vendor_sentiment.label
+enum
+#32 #40
+positive | neutral | negative
+vendor_sentiment.intensity
+number
+#32 #40
+0.0-1.0
+coherence_score
+number
+#32
+0.0-1.0 · sincronização emocional vendedor × cliente na fase
+phase_critical_event
+string|null
+#33
+Evento mais significativo da fase · null se plana
+conversation_heatmap[]
+array
+#40
+Montado por CÓDIGO: segment_index · intensity · sentiment · phase · dominant_emotion
+AGENTE 5 · PERFIL PSICOLÓGICO E COMPORTAMENTAL DO CLIENTE
+Features cobertas com campos linkados:
+Feature #
+Nome
+Campos produzidos
+#11
+Preferências por estilos
+preferred_communication_style · client_knowledge_level
+#15
+Perfil psicológico
+archetype · decision_style · risk_profile · trust_level_towards_seller
+#16
+Perfil de cliente
+inferred_age_range · inferred_gender · inferred_socioeconomic_class · price_sensitivity · purchase_type
+#39
+Análise preditiva — inputs de perfil
+price_sensitivity + client_engagement_level como features preditivas
+#7
+Qualificação de oportunidades
+price_sensitivity + client_engagement_level → realistically_addressable no A6
+Sub-etapas — LOCAL antes do LLM:
+Sub-etapa
+Onde executa
+O que faz
+Extrair sinais de perfil da E2
+LOCAL
+Keywords de profissão · menção de família · nível técnico nas perguntas do cliente (E2 output)
+Filtrar APENAS turnos do CLIENTE
+LOCAL
+Remove todos os turnos do VENDEDOR · análise de perfil a partir de turnos do vendedor é viés metodológico
+Bloquear campos CRM-dependent
+LOCAL (código)
+frequência_compra · LTV · histórico de produto → null + CRM_REQUIRED flag antes mesmo de chamar o LLM
+Inferir arquétipo e perfil
+LLM (1 call)
+4 arquétipos fechados · campos demográficos com is_inferred=true em todos sem exceção
+Validar disclaimers obrigatórios
+LOCAL (código)
+Todos os campos demográficos devem ter is_inferred=true · rejeitar output se ausente
+Os 4 arquétipos — taxonomia para varejo ótico premium:
+Arquétipo
+Padrões linguísticos detectáveis
+Estratégia de venda indicada
+RACIONAL
+Perguntas técnicas específicas, pedidos de dados, comparações quantitativas, 'comprovado?', 'diferença real?'
+Dados técnicos, estudos, garantias explícitas, evitar hipérboles
+EMOCIONAL
+Comentários sobre aparência, reações espontâneas, metáforas, descrições sensoriais, história pessoal
+Storytelling, demonstração vivencial, benefício de vida (não especificação)
+SOCIAL
+Menção de opiniões alheias, preocupação com aprovação, 'minha amiga tem', validação constante
+Prova social, depoimentos, popularidade, conexão com identidade social
+CONSERVADOR
+Resistência a novidades, pedidos de garantia, questionamentos sobre durabilidade, parcelamento
+Garantia estendida, custo-benefício de longo prazo, confiabilidade da marca
+Schema de output completo:
+Campo
+Tipo
+Feature servida
+Disclaimer obrigatório / Constraint
+archetype
+enum
+#15
+RACIONAL | EMOCIONAL | SOCIAL | CONSERVADOR
+decision_style
+string
+#15
+Texto livre descritivo · obrigatório
+risk_profile
+string
+#15
+averse | moderate | tolerant + justificativa
+trust_level_towards_seller
+string
+#15
+low | medium | high
+price_sensitivity
+enum
+#7 #15 #16
+high | medium | low | uncertain
+inferred_age_range
+string
+#16
+Formato '35-45' · INFERIDO, não coletado · is_inferred=true
+inferred_gender
+enum
+#16
+male | female | non_binary | uncertain · bias para uncertain na dúvida
+inferred_socioeconomic_class
+string
+#16
+A | B | C | uncertain · INFERIDO · is_inferred=true
+estimated_purchasing_power
+string
+#16
+Texto qualitativo · INFERIDO · is_inferred=true
+purchase_type
+enum
+#16
+new_customer | returning_customer | uncertain
+preferred_communication_style
+string
+#11 #15
+Texto descritivo do estilo observado
+client_engagement_level
+enum
+#7 #11
+high | medium | low
+client_knowledge_level
+enum
+#11
+expert | intermediate | novice
+repurchase_signal
+boolean
+#16
+True se sinal verbal de retorno planejado
+AGENTE 6 · OPORTUNIDADES PERDIDAS — GAP LOCAL PRIMEIRO
+Features cobertas com campos linkados:
+Feature #
+Nome
+Campos produzidos
+#7
+Oportunidades de venda (cross/upsell)
+cross_sell_not_offered[] · upsell_not_offered[] · total_estimated_value_loss
+#8
+Produtos pedidos vs apresentados
+products_requested_not_shown[] · products_shown_not_requested[]
+#11
+Preferências — necessidades implícitas
+implicit_needs_not_addressed[]
+#18
+Biblioteca de práticas — gap de cobertura
+cross_sell_not_offered como input para análise de padrões de esquecimento
+Sub-etapas — LOCAL primeiro, LLM só para o que código não resolve:
+Sub-etapa
+Onde executa
+O que faz
+Calcular gap de cross-sell
+LOCAL (código)
+catálogo − produtos_mencionados = cross_sell_gap[] · OPERAÇÃO DE CONJUNTO · zero LLM
+Calcular gap de upsell
+LOCAL (código)
+Produto apresentado com versão premium não apresentada · cruzamento de hierarquia do catálogo · zero LLM
+Calcular total_estimated_value_loss
+LOCAL (código)
+Soma de preços do product_catalog.json · NUNCA LLM · R$0 é output válido
+Detectar produtos pedidos não mostrados
+LOCAL (E2 output)
+products_requested[] − products_shown[] = gap determinístico
+Identificar necessidades implícitas
+LLM (1 call)
+ÚNICA parte LLM do A6: inferir necessidades não verbalizadas do contexto do cliente
+Qualificar realistically_addressable
+LLM (integrado na call)
+Usa perfil A5 (price_sensitivity + engagement_level) para filtrar oportunidades irrealistas
+Sinalizar promoções e serviços não mencionados
+LOCAL (SQL)
+Cruzamento com tabelas promotions e services · sem LLM
+Tipos de oportunidade e método de detecção:
+Tipo
+Método
+Certeza
+Campo de qualificação
+Cross-sell não ofertado
+E2 det: catálogo − produtos_mencionados
+Alta
+realistically_addressable via perfil A5
+Upsell não realizado
+E2 + análise posicional de sequência
+Média-alta
+realistically_addressable via price_sensitivity
+Necessidade implícita
+A6 LLM: inferência do contexto conversacional
+Média
+implicit_needs_not_addressed[]
+Produto pedido não demonstrado
+E2 det: client_mentioned − products_shown
+Alta
+products_requested_not_shown[]
+Produto mostrado sem interesse
+E2 + A6: sem sinal de engajamento
+Média
+products_shown_not_requested[]
+Schema de output completo:
+Campo
+Tipo
+Feature servida
+Constraint
+total_estimated_value_loss
+number
+#7
+Calculado por código (product_catalog.json) · NUNCA pelo LLM · R$0 é válido
+cross_sell_not_offered[].product
+string
+#7
+Nome do produto do catálogo
+cross_sell_not_offered[].estimated_value
+number
+#7
+Do product_catalog.json · calculado por código
+cross_sell_not_offered[].client_signal
+string
+#7
+Evidência de elegibilidade do cliente
+cross_sell_not_offered[].realistically_addressable
+boolean
+#7
+Qualificado pelo perfil do A5
+upsell_not_offered[].product_offered
+string
+#7
+Produto de menor valor que foi apresentado
+upsell_not_offered[].product_premium
+string
+#7
+Produto premium que não foi apresentado
+upsell_not_offered[].estimated_delta_value
+number
+#7
+Diferença de valor · calculado por código · nunca LLM
+implicit_needs_not_addressed[]
+string[]
+#7 #11
+Necessidades inferidas do contexto · ÚNICO campo LLM do A6
+products_requested_not_shown[]
+string[]
+#8
+Produtos que cliente pediu e vendedor não mostrou
+products_shown_not_requested[]
+string[]
+#8
+Produtos apresentados sem sinal de interesse do cliente
+AGENTE 7 · SÍNTESE QUALITATIVA — NUNCA VÊ A TRANSCRIÇÃO CRUA
+REGRA ABSOLUTA: O A7 recebe os outputs estruturados de A1-A6 + metadados de contexto + observações manuais do auditor (#12 se disponível). NUNCA recebe a transcrição crua. A síntese é construída sobre fatos classificados — não inferências abertas sobre texto bruto.
+Features cobertas com campos linkados:
+Feature #
+Nome
+Campos produzidos
+#12
+Observações manuais do auditor (input adicional)
+Incorporado no summary_narrative quando disponível
+#13
+Críticas veladas — consolidação
+hidden_criticisms[] · cruzamento A4 + A2
+#20
+Análise de conformidade
+compliance.* todos os campos
+#21
+Recomendação de treinamento
+training_recommendation · strengths[] · improvements[]
+#31
+Análise competitiva
+competitive_analysis.competitors_mentioned[] · loss_to_competitor_risk
+#32
+Análise de linguagem e comunicação
+communication_analysis.* todos os campos
+#33
+Momentos críticos — consolidação
+critical_moments[] · cruzamento A3 + A4 + A2
+#34
+Análise de follow-up
+follow_up.* todos os campos
+Geral
+Síntese narrativa para relatório final
+summary_narrative · strengths[] · improvements[]
+Estrutura obrigatória do summary_narrative — 5 parágrafos:
+Parágrafo
+Conteúdo
+Base de dados dos inputs
+1 · Perfil do cliente
+Arquétipo (A5) + intenção (A3) + contexto em 2 frases · Sem julgamento
+psychological_profile + purchase_intent
+2 · Atendimento
+Checklist (A1+E2) + fases críticas (A4 coherence) + gestão de objeções (A2) · Tom construtivo
+checklist + objections + conversation_heatmap
+3 · Dinâmica
+Como sentimento evoluiu por fase · Onde vendedor ganhou ou perdeu o cliente
+conversation_heatmap + critical_moments
+4 · Oportunidades
+2-3 mais impactantes e realistically_addressable=true (A6) · contextualizadas pelo perfil (A5)
+lost_opportunities + psychological_profile
+5 · Recomendação
+Ação de follow-up + gap de treinamento principal + risco competitivo se high
+follow_up + training_recommendation + competitive_analysis
+Schema de output completo:
+Campo
+Tipo
+Feature servida
+Constraint
+summary_narrative
+string
+Geral
+3-5 parágrafos · cada afirmação rastreável a campo dos inputs · zero citações da transcrição crua
+strengths[]
+string[]
+#21 #17
+Pontos fortes identificados
+improvements[]
+string[]
+#21
+Pontos de melhoria específicos e acionáveis
+training_recommendation
+string
+#21
+Texto específico sobre gap principal do vendedor
+compliance.abusive_practice_detected
+boolean
+#20
+—
+compliance.unfulfillable_promise_detected
+boolean
+#20
+—
+compliance.warranty_mentioned
+boolean
+#20
+—
+compliance.consumer_rights_mentioned
+boolean
+#20
+—
+compliance.mandatory_script_followed
+boolean
+#20
+Proxy: checklist.total_score > 70
+compliance.compliance_score
+number
+#20
+0-100 ponderado
+compliance.compliance_alerts[]
+string[]
+#20
+NÃO PODE ser vazio se compliance_score < 40 · validação por código
+communication_analysis.empathy_demonstrated
+boolean
+#32
+—
+communication_analysis.active_listening_signals
+boolean
+#32
+—
+communication_analysis.language_complexity
+enum
+#32
+technical | balanced | simple
+communication_analysis.jargon_usage
+enum
+#32
+high | medium | low
+communication_analysis.personalization_score
+number
+#32
+0-100
+communication_analysis.sales_techniques_detected[]
+string[]
+#32
+—
+critical_moments[].moment_type
+enum
+#33
+TURNAROUND | PERDA | OBJECTION | DECISAO | ENGAJAMENTO
+critical_moments[].timestamp_pct
+number
+#33
+0-100 posição percentual na conversa
+critical_moments[].description
+string
+#33
+Texto descritivo do momento crítico
+hidden_criticisms[].type
+string
+#13
+—
+hidden_criticisms[].severity
+enum
+#13
+high | medium | low
+hidden_criticisms[].turn_id
+integer
+#13
+—
+competitive_analysis.competitors_mentioned[]
+array
+#31
+{ competitor_name, comparison_direction: favorable|unfavorable, client_statement }
+competitive_analysis.loss_to_competitor_risk
+enum
+#31
+high | medium | low
+follow_up.contact_info_collected
+boolean
+#34
+—
+follow_up.follow_up_promised
+boolean
+#34
+—
+follow_up.contact_type_collected
+enum
+#34
+phone | email | whatsapp | multiple | none
+follow_up.follow_up_timeframe_mentioned
+string
+#34
+—
+AGENTE 8 · SIMULADOR DE CONVERSAS — PERSONA SINTÉTICA
+Features cobertas: #35 (simulador com IA) · #21 (progressão de treinamento e gamificação)
+Executa sob demanda — não no pipeline automático de análise. Mantém estado de sessão entre turnos.
+Componente
+Função
+Agente utilizado
+Gerador de Persona
+Cria perfil sintético com arquétipo, objeções prováveis, knowledge_level, urgência
+Prompt sobre taxonomia do A5
+Motor de Simulação
+Responde como cliente mantendo coerência de persona ao longo da sessão · estado serializado
+A8 dedicado com estado
+Avaliador de Performance
+Pontua desempenho do vendedor na simulação por turno e ao final
+A3 (intent_score) + E2 reutilizado (checklist)
+Gerador de Feedback
+Feedback específico por turno: o que funcionou, alternativa sugerida
+A7 simplificado (sem síntese completa)
+Schema de output por sessão:
+Campo
+Tipo
+Feature servida
+Descrição
+persona_archetype
+enum
+#35
+Arquétipo simulado da persona
+persona_objections[]
+string[]
+#35
+Objeções que a persona levantará ao longo da sessão
+session_checklist_score
+number
+#35 #21
+Quanto do checklist foi coberto pelo vendedor
+session_intent_score
+number
+#35 #21
+Intenção final da persona ao encerramento
+turn_feedback[]
+object[]
+#35
+{ turn_id, vendor_text, assessment, suggested_alternative }
+difficulty_level
+enum
+#35 #21
+beginner | intermediate | advanced · configurável
+overall_feedback
+string
+#35 #21
+Avaliação geral com pontos fortes e gaps principais
+AGENTE 9 · BIBLIOTECA DE PRÁTICAS — EMBEDDING LOCAL, ZERO API CALL
+Features cobertas: #18 (biblioteca de melhores práticas) · #4 (sugestão de templates similares)
+A9 usa sentence-transformers via ONNX runtime rodando localmente no script Bun. Zero chamada de API de embedding. Embeda texto ESTRUTURADO — não a transcrição crua. Custo de embedding por conversa: zero.
+Sub-etapa
+Onde executa
+O que faz
+Verificar critério de exemplar
+LOCAL (SQL)
+checklist.total_score > 80 AND intent_score > 70 → elegível para biblioteca
+Montar input de embedding
+LOCAL (código)
+Serializa: archetype + objections_types[] + products_mentioned[] + phase_scores[] · NUNCA transcrição crua
+Computar embedding
+LOCAL (sentence-transformers ONNX)
+Vetor de 384 dimensões · custo zero de API
+Persistir no pgvector
+LOCAL (SQL)
+conversation_embeddings com índice HNSW para cosine similarity · skill_tags[]
+Processar query de busca
+LOCAL (embedding) + LLM opcional
+Query em linguagem natural → embedding local → similarity search · LLM só para formatar resumo do resultado
+6. Matriz de Rastreabilidade — 40 Features × 9 Agentes
+Legenda: ● primário (feature não existe sem este agente/método) · ◐ contribui parcialmente · — não envolvido · DET = E1/E2 determinístico · SQL = query sobre dados persistidos · MAN = input manual · LOC = processamento local de áudio · CRM = depende de integração CRM/PDV
+Feature
+A1
+A2
+A3
+A4
+A5
+A6
+A7
+A8
+A9
+DET
+SQL
+MAN/LOC
+#1 Captura de áudio
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+#2 Processamento
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+—
+LOC
+#3 Semântica / NLP
+—
+◐
+◐
+◐
+—
+—
+—
+—
+—
+◐
+—
+—
+#4 Construtor prompts
+—
+—
+—
+—
+—
+—
+◐
+—
+◐
+—
+SQL
+—
+#5 Checklist Zeiss
+●
+—
+—
+—
+—
+—
+—
+—
+—
+◐
+—
+—
+#6 Métricas vendas
+—
+—
+◐
+—
+—
+—
+◐
+—
+—
+◐
+●
+—
+#7 Oportunidades
+—
+—
+—
+—
+◐
+●
+—
+—
+—
+◐
+—
+—
+#8 Produtos pedidos vs apresentados
+—
+—
+—
+—
+—
+●
+—
+—
+—
+◐
+—
+—
+#9 Tendências comportamento
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+—
+#10 Tempo permanência
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+◐
+—
+#11 Preferências estilo
+—
+—
+—
+◐
+●
+◐
+—
+—
+—
+—
+—
+—
+#12 Observações auditor
+—
+—
+—
+—
+—
+—
+◐
+—
+—
+—
+—
+●
+#13 Críticas veladas
+—
+◐
+—
+◐
+—
+—
+●
+—
+—
+—
+—
+LOC
+#14 Intenção de compra
+—
+◐
+●
+—
+—
+—
+—
+—
+—
+—
+—
+—
+#15 Perfil psicológico
+—
+—
+—
+—
+●
+—
+—
+—
+—
+—
+—
+—
+#16 Perfil de cliente
+—
+—
+—
+—
+●
+—
+—
+—
+—
+—
+SQL
+—
+#17 Benchmarking
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+—
+#18 Biblioteca práticas
+—
+—
+—
+—
+—
+—
+◐
+—
+●
+—
+◐
+—
+#19 Objeções e respostas
+—
+●
+—
+—
+—
+—
+—
+—
+—
+—
+SQL
+—
+#20 Conformidade
+◐
+—
+—
+—
+—
+—
+●
+—
+—
+—
+—
+—
+#21 Treinamento
+◐
+—
+—
+—
+—
+—
+●
+◐
+◐
+—
+SQL
+—
+#22 Dashboards
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+—
+#23 Integrações externas
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+#24 Catálogo produtos
+—
+—
+—
+—
+—
+◐
+—
+—
+—
+◐
+—
+●
+#25 Lojas e territórios
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+#26 Usuários e permissões
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+#27 Player de áudio
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+—
+—
+#28 Transcrição interativa
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+—
+—
+#29 Exportação
+—
+—
+—
+—
+—
+—
+◐
+—
+—
+—
+●
+—
+#30 Alertas
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+—
+#31 Análise competitiva
+—
+—
+—
+—
+—
+—
+●
+—
+—
+◐
+SQL
+—
+#32 Linguagem e comunicação
+—
+—
+—
+◐
+◐
+—
+●
+—
+—
+◐
+—
+—
+#33 Momentos críticos
+—
+◐
+◐
+◐
+—
+—
+●
+—
+—
+—
+—
+—
+#34 Follow-up
+—
+—
+—
+—
+—
+—
+●
+—
+—
+—
+SQL
+—
+#35 Simulador IA
+—
+—
+◐
+—
+◐
+—
+◐
+●
+—
+—
+—
+—
+#36 Marketplace análises
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+—
+#37 Configurações modelo IA
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+—
+●
+#38 Compliance e privacidade
+—
+—
+—
+—
+◐
+—
+—
+—
+—
+—
+—
+●
+#39 Análise preditiva
+—
+—
+◐
+—
+◐
+—
+—
+—
+—
+—
+●
+—
+#40 Heatmap de conversa
+—
+—
+—
+●
+—
+—
+—
+—
+—
+—
+—
+—
+Features com ● em DET ou SQL não fazem nenhuma chamada LLM. Features com múltiplos ◐ têm contribuições distribuídas entre agentes. Colunas em branco (—) significam que a feature específica não depende daquele agente — não que o agente não exista.
+6.1 Ordem de Execução e Dependências
+Ordem
+Agente
+Depende de
+Alimenta
+Paralelismo possível
+1
+E1 · Parser
+Transcrição bruta
+Todos
+—
+2
+E2 · Extração determinística
+E1 turns[]
+Todos os agentes
+—
+3
+A1 · Checklist ambíguo
+E2 (itens requires_llm=true)
+A7
+Paralelo com A2, A4, A5 — Janela A
+4
+A2 · Objeções
+E2 (client_turns)
+A3, A7
+Paralelo com A1, A4, A5 — Janela A
+5
+A3 · Intenção
+E2 + output A2
+A7
+Após A2 · paralelo com A6 — Janela B
+6
+A4 · Heatmap
+E2 (segments por fase)
+A7
+Paralelo com A1, A2, A5 — Janela A
+7
+A5 · Perfil
+E2 (client_turns + métricas)
+A6, A7
+Paralelo com A1, A2, A4 — Janela A
+8
+A6 · Oportunidades
+E2 + output A5
+A7
+Após A5 · paralelo com A3 — Janela B
+9
+A7 · Síntese
+Outputs A1+A2+A3+A4+A5+A6
+Relatórios finais
+Último — sem paralelismo
+10
+E4 · Validação de schema
+Todos os outputs
+E5 Persistência
+—
+11
+E5 · Persistência
+E4 validado
+Views SQL · Dashboards
+—
+12
+A9 · Embedding
+A7 completo · critério exemplar
+pgvector store
+Após pipeline
+Janela
+Agentes em paralelo
+Condição de saída
+Benefício de latência
+Janela A
+A1 + A2 + A4 + A5
+Todos os 4 concluídos e schemas validados
+~60% redução vs execução serial
+Janela B
+A3 + A6 (após A2 e A5)
+Ambos concluídos e validados
+~30% redução adicional
+6.2 Critérios de Aceitação por Agente
+Agente
+Critério mínimo de aceitação
+Smoke test recomendado
+A1
+Schema completo nos 7 itens · confidence calibrado (INCONCLUSIVO se <0.4) · contato_pos_visita sempre NOT_IN_TRANSCRIPT
+3 transcrições com resultado esperado documentado · testar caso de falha de schema
+A2
+Taxonomia fechada sem vazamento tipográfico · efficacy em 100% das objeções · array vazio válido
+Transcrição com objeção de preço conhecida → classificar corretamente · testar transcrição sem objeções
+A3
+cot_reasoning com 4 partes D1-D4 explícitas · dimension_scores presentes · intent_score coerente com classification
+Venda fechada → score >70 · visita exploratória → score <35 · testar calibração com 3 casos
+A4
+Uma entrada no heatmap por fase · coherence_score presente em todas as fases · loop correto (N calls = N fases)
+Heatmap renderiza no frontend sem erros · testar conversa com 5 fases
+A5
+Todos os campos obrigatórios presentes · archetype em enum fechado · is_inferred=true em todos os demográficos
+Perfil RACIONAL documentado → classificar como RACIONAL · uncertain nos demográficos sem evidência
+A6
+total_estimated_value_loss calculado por código (não LLM) · realistically_addressable presente
+Conversa sem PhotoFusion para cliente outdoor → constar em cross_sell · valor calculado correto
+A7
+summary_narrative com 5 parágrafos estruturados · compliance_alerts não vazio se score <40 · zero menção à transcrição crua
+Output sem nenhuma citação direta da transcrição · toda afirmação rastreável a campo dos inputs
+A8
+Persona mantém coerência de arquétipo em 10+ turnos · objeções configuradas aparecem contextualmente · feedback por turno específico
+Sessão de 10 turnos com RACIONAL → perguntas técnicas aparecendo · feedback acionável
+A9
+Embedding gerado para conversas com score>80 E intent>70 · similarity search retorna resultado relevante em <1s
+Query 'objeção de preço com cliente conservador' → retornar conversas com PRECO_ALTO e archetype CONSERVADOR
+7. Schema das Tabelas — 15 Novas de Pipeline + 15 Auxiliares de Produto
+Schema imutável após o início da Fase 2. Mudanças de schema após T2.1 geram migração em cascata em todos os agentes e relatórios. Este é o único ponto do projeto onde vale gastar tempo extra antes de qualquer código. Revisar esta seção completa antes de executar T1.4.
+7.1 Tabelas do Pipeline de Análise
+Tabela
+Produzida por
+Consumida por
+Campos críticos
+conversation_turns
+E1
+E2 · todos os agentes
+id · audio_id · role (VENDEDOR|CLIENTE|TERCEIRO) · text · char_start · char_end · confidence_score · manual_review · edited · edited_by
+conversation_entities
+E2
+A6 · A7 · relatórios
+audio_id · entity_type (product|price|competitor|profession) · value · turn_id · role · source · confidence
+checklist_results
+E2 + A1
+A7 · relatórios
+audio_id · item_key · verdict · confidence · evidence · source (DET|LLM) · weight · turn_id · phase
+conversation_analysis
+A3+A4+A5+A7
+Todos os relatórios
+audio_id · purchase_intent JSONB · nlp_analysis JSONB · psychological_profile JSONB · customer_profile JSONB · behavioral_trends JSONB · critical_moments JSONB · hidden_criticisms JSONB · compliance JSONB · communication_analysis JSONB · follow_up JSONB · competitive_analysis JSONB · conversation_heatmap JSONB · predictive JSONB · summary_narrative TEXT · strengths TEXT[] · improvements TEXT[] · training_recommendation TEXT
+objections
+A2
+A3 · A7 · relatórios
+audio_id · objection_type · objection_text · turn_id · vendor_response_text · efficacy · phase · objection_resolved
+lost_opportunities
+A6
+A7 · relatórios
+audio_id · total_estimated_value_loss NUMERIC · cross_sell JSONB · upsell JSONB · implicit_needs TEXT[] · products_requested_not_shown TEXT[] · products_shown_not_requested TEXT[] · realistically_addressable
+sales_metrics
+E2 + CRM
+Relatórios
+audio_id · sale_completed BOOL · final_value_mentioned NUMERIC · discount_pct NUMERIC · premium_offer_made BOOL · seller_cost_hour NUMERIC · roi_estimated NUMERIC · timing JSONB
+speaker_inference
+E2
+Relatórios
+audio_id · seller_talk_ratio · client_talk_ratio · interruptions_detected · open_questions_by_seller · closed_questions_by_seller
+audio_features
+E2 + pré-proc áudio
+Relatórios · #3.12 #13.5 #13.6
+audio_id · quality_flag · snr_estimate · silence_segments JSONB · pitch_avg · pitch_variance · discomfort_signal · significant_silence_after_proposal
+conversation_embeddings
+A9 (local)
+pgvector search
+audio_id · embedding vector(384) · context_summary · is_exemplar · skill_tags TEXT[] · created_at
+simulation_sessions
+A8
+Dashboard treinamento
+id · seller_id · persona_archetype · difficulty_level · session_checklist_score · session_intent_score · turn_feedback JSONB · overall_feedback · created_at
+7.2 Tabelas Auxiliares de Produto
+Tabela
+Propósito
+Campos principais
+audit_observations
+Observações manuais do auditor (#12)
+audio_id · auditor_id · free_text · physical_checklist JSONB · vendor_appearance INT(1-5) · store_atmosphere TEXT · staff_behavior TEXT · merchandising_notes TEXT · visible_competition TEXT · photos_urls TEXT[] · in_session BOOL
+follow_up_records
+Registro de follow-ups realizados (#34)
+audio_id · seller_id · contact_type (phone|email|whatsapp|presential) · contact_date · is_return BOOL · conversion_result BOOL · approach_notes · created_at
+vendor_training_plans
+Planos de treinamento individualizados (#21)
+seller_id · audio_id_origin · gaps TEXT[] · learning_track_id · recommended_simulations TEXT[] · status (pending|active|completed) · created_at
+promotions
+Promoções vigentes (#7.3.3 #23.7)
+id · name · product_ids TEXT[] · start_date · end_date · description · discount_pct · is_active
+services
+Serviços adicionais (#7.3.4)
+id · name · keywords TEXT[] · estimated_value NUMERIC · description · is_active
+loyalty_programs
+Programas de fidelidade (#7.3.5)
+id · name · description · eligibility_criteria JSONB · is_active
+missions
+Campanhas de cliente oculto (#1.5)
+id · name · store_ids TEXT[] · checklist_id · instructions TEXT · start_date · end_date · auditor_ids TEXT[] · status
+analysis_triggers
+Config de quando executar análises (#4.13-4.15)
+id · trigger_type (always|sale_only|no_sale|scheduled) · priority INT · schedule_cron · analysis_type · is_active
+alert_rules
+Regras de alerta configuráveis (#30)
+id · metric · operator · threshold · notification_type · recipients TEXT[] · is_active
+learning_tracks
+Trilhas de aprendizado (#21.2)
+id · name · skill_type · steps JSONB · required_score · badge_id
+transcript_annotations
+Anotações em trechos (#28.7)
+id · audio_id · turn_id · user_id · annotation_text · created_at
+gamification
+Pontos e badges (#21.6)
+seller_id · total_points · badges JSONB · rank · last_updated
+certifications
+Certificações internas (#21.9)
+id · seller_id · certification_type · achieved_at · score · valid_until
+crm_integrations
+Config de integrações CRM (#23.1)
+id · provider · oauth_config JSONB ENCRYPTED · field_mapping JSONB · is_active
+device_registry
+Gestão de dispositivos (#1.10)
+id · store_id · device_type · battery_pct · storage_free_mb · last_sync · status
+7.3 Arquivos JSON de Ontologia — Revisão Manual Obrigatória antes de T1.4
+Os 3 JSONs são a única peça que o Antigravity não pode construir sozinho. Um falso positivo em 'cumprimentou_cliente' distorce o score de TODOS os atendimentos para sempre. Dedique 3-4h nesta revisão antes de abrir qualquer IDE.
+Arquivo
+Conteúdo obrigatório
+Esforço
+Quem valida
+checklist_zeiss_v6.json
+22 itens · keywords por item · role · janela · peso · flag requires_llm · exemplos positivos e negativos de transcrição real
+3-4h
+MANUAL obrigatório — Gui + especialista Zeiss
+product_catalog.json
+Produtos · variações linguísticas · categorias · complementaridade · hierarquia básico/premium · preços · margin · keywords[] · scripts[]
+1-2h
+MANUAL obrigatório — Gui
+objection_taxonomy.json
+9 tipos · definição canônica · exemplos positivos (esta frase É este tipo) · exemplos negativos (esta frase NÃO É este tipo) · keywords associadas
+1h
+MANUAL obrigatório — Gui
+8. Plano de Execução — 7 Fases · 65 Tarefas
+Fase
+Duração estimada
+Entrega principal
+1 · Fundação — Ontologia, Schema, Parser
+~2 semanas
+3 JSONs validados · 30 tabelas no Supabase · parser.js + extractor.js testados com 3 transcrições reais
+2 · Pipeline de Classificação — 9 Agentes
+~4 semanas
+/analyze-v2 com 9 agentes · validação end-to-end com 5 conversas reais · 20 top-level keys presentes
+3 · Relatórios Estruturados — SQL Views
+~3 semanas
+9 módulos refatorados · dashboards executivo/gerencial/operacional · exportação PDF/CSV · permissões 5 perfis
+4 · Agentes Adicionais — Simulador, Biblioteca
+~3 semanas
+A8 funcional · A9 pgvector · biblioteca de práticas com busca semântica · análise de áudio local
+5 · Inteligência Avançada — Preditiva, Construtor, CRM
+~3 semanas
+Análise preditiva · construtor de checklist · integrações CRM/PDV · agendamento · alertas
+6 · Ecossistema e Escala — Multi-tenant, API, LGPD
+~4 semanas
+Multi-loja com RLS hierárquico · API pública · gamificação · LGPD · app mobile
+7 · Observabilidade e Refinamento
+Contínua
+Dashboard de qualidade dos agentes · calibração semestral · depreciação /classify
+REGRA DE MIGRAÇÃO: o endpoint /classify continua operando até que /analyze-v2 esteja validado com ≥10 conversas reais (T2.13). Relatórios são migrados módulo a módulo na Fase 3. Nenhuma fase quebra produção.
+FASE
+1
+FUNDAÇÃO — ONTOLOGIA, SCHEMA, PRÉ-PROCESSAMENTO, PARSER
+Prioridade máxima · Sem ela, nenhuma outra fase tem valor · ~2 semanas
+ID
+Tarefa
+Executor
+Depende de
+Critério de Aceitação
+T1.1
+Revisar e completar checklist_zeiss_v6.json — 22 itens, keywords, pesos, requires_llm, exemplos positivos/negativos
+MANUAL
+—
+0 falsos positivos em 5 transcrições reais · cada item com ≥3 keywords testadas
+T1.2
+Criar product_catalog.json — produtos, variações, complementaridade, hierarquia, preços, margin, scripts[]
+MANUAL
+—
+Todos os produtos do catálogo · ≥3 variações linguísticas · margin e scripts[] preenchidos
+T1.3
+Criar objection_taxonomy.json — 9 tipos, definição canônica, exemplos positivos e negativos
+MANUAL
+—
+9 tipos com ≥2 exemplos reais de transcrição e ≥1 exemplo negativo por tipo
+T1.4
+Script SQL das 30 tabelas (15 pipeline + 15 auxiliares) com RLS · 5 perfis de acesso
+Antigravity
+T1.1-T1.3
+Todas as tabelas no Supabase dev · RLS validado com 5 perfis (Admin, Gerente Regional, Gerente Loja, Vendedor, Auditor)
+T1.5
+Módulo de pré-processamento de áudio local — VAD, SNR estimado, quality_warning, silêncios
+Antigravity
+T1.4
+quality_warning gerado para áudio ruidoso · VAD detecta silêncios >3s · zero API call · roda local
+T1.6
+Implementar parser.js — parseTranscriptionToTurns(text) → turns[] + confidence_score + manual_review
+Antigravity
+T1.4
+≥0.8 confidence com marcadores · manual_review=true sem marcadores · testado em 3 áudios reais
+T1.7
+Implementar extractor.js — extractDeterministicSignals(turns, ontology) → entities + checklist_evidence + speech_metrics + phase_map + keywords_frequency + products_gap
+Antigravity
+T1.6
+15 itens checklist detectados corretamente · 0 falsos positivos em preços · produtos Zeiss detectados
+T1.8
+Testes unitários com 3 transcrições reais — role assignment, entidades, checklist det., phase_map
+MANUAL + Antigravity
+T1.7
+Taxa de acerto ≥90% em role assignment · todos os produtos da conversa detectados · fases coerentes
+FASE
+2
+PIPELINE DE CLASSIFICAÇÃO — 9 AGENTES COM JANELAS DE PARALELISMO
+Core do produto · Substitui /classify · ~4 semanas
+ID
+Tarefa
+Executor
+Depende de
+Critério de Aceitação
+T2.1
+Criar POST /functions/analyze-v2 — orquestrador com Janela A (A1+A2+A4+A5 paralelo) e Janela B (A3+A6 paralelo após Janela A)
+Antigravity
+T1.8
+Latência <35s para 10min de conversa · telemetria por agente registrada · falhas por agente logadas sem quebrar pipeline
+T2.2
+Implementar A1 (checklist ambíguo) — 7 itens, contexto mínimo, schema obrigatório, re-execução, merge com E2
+Antigravity
+T2.1
+7 itens com verdict em enum fechado · contato_pos_visita sempre NOT_IN_TRANSCRIPT · confidence<0.4 rebaixado por código
+T2.3
+Implementar A2 (objeções) — pré-filtro local por keywords, taxonomia 9 tipos, efficacy, output alimenta A3
+Antigravity
+T2.1
+Pré-filtro local antes de qualquer LLM · taxonomia sem vazamento · array vazio válido
+T2.4
+Implementar A4 (heatmap) — loop por fase, sentimento por falante, heatmap montado por código
+Antigravity
+T2.1
+N calls = N fases · heatmap[] construído por código · coherence_score presente em todas as fases
+T2.5
+Implementar A5 (perfil) — somente turns CLIENTE, arquétipos fechados, campos CRM como null+flag
+Antigravity
+T2.1
+Archetype em enum fechado · is_inferred=true em todos demográficos · CRM_REQUIRED flag correto
+T2.6
+Implementar A3 (intenção) — 4 proxies locais D1-D4 calculados ANTES do LLM, CoT 4 partes obrigatório
+Antigravity
+T2.3
+4 proxies locais calculados · cot_reasoning com 4 partes D1/D2/D3/D4 · score coerente com classification
+T2.7
+Implementar A6 (oportunidades) — gap LOCAL (subtração de conjuntos) PRIMEIRO, LLM só para implicit_needs e qualificação
+Antigravity
+T2.5
+total_estimated_value_loss calculado por código · LLM não recebe números · realistically_addressable via perfil A5
+T2.8
+Implementar A7 (síntese) — serializa outputs A1-A6, nunca transcrição, 5 parágrafos, compliance validado por código
+Antigravity
+T2.2-T2.7
+5 parágrafos estruturados · compliance_alerts não vazio se score<40 · zero citação da transcrição crua
+T2.9
+Configurar sentence-transformers via ONNX runtime no Bun para A9 (embedding local, zero API)
+Antigravity
+T2.8
+Embedding 384 dimensões local · zero API call · <500ms por conversa · pgvector ativado
+T2.10
+Implementar A9 — critério de exemplar, input estruturado (não transcrição), pgvector store
+Antigravity
+T2.9
+Embedding gerado só para score>80 AND intent>70 · input = arquétipo+objeções+produtos+phase_scores
+T2.11
+Integrar telemetria — usage_telemetry por agente: tokens, custo, latência, taxa de re-execução
+Antigravity
+T2.2-T2.10
+Custo por agente registrado · latência das janelas A e B separadas · taxa de re-execução A1 visível
+T2.12
+Adicionar botão 'Analisar v2' no dashboard.html mantendo botão original em paralelo
+Antigravity
+T2.11
+Ambos funcionais · resultado v2 em tab separada · zero regressão no v1
+T2.13
+Validação end-to-end com 5 conversas reais — consistência em 3 execuções · todos 20 top-level keys presentes
+MANUAL
+T2.12
+Output idêntico em 3 execuções · 20 keys presentes · compliance_alerts coerentes · zero citações cruas
+FASE
+3
+RELATÓRIOS ESTRUTURADOS — SQL VIEWS, REFATORAÇÃO DOS 9 MÓDULOS
+Primeiro relatório comparável entre atendimentos · ~3 semanas
+ID
+Tarefa
+Executor
+Depende de
+Critério de Aceitação
+T3.1
+Criar SQL views primárias: vw_checklist_summary, vw_objections_by_type, vw_intent_distribution, vw_vendor_performance, vw_lost_opportunities, vw_speaker_metrics, vw_timing_analysis
+Antigravity
+T2.13
+<200ms em 100 conversas · 5 perfis de RLS validados
+T3.2
+Criar SQL views de tendências e benchmarking: vw_behavioral_trends, vw_objection_trends, vw_product_trends, vw_sentiment_trends, vw_vendor_benchmarks, vw_store_comparison, vw_checklist_conversion, vw_technique_success, vw_objection_efficacy
+Antigravity
+T3.1
+Corretas com ≥30 conversas · sazonalidade calculável · ranking com ≥5 vendedores
+T3.3
+Refatorar r_qa_heatmap.js — substituir JSONB parsing por query em vw_checklist_summary
+Antigravity
+T3.1
+Renderização idêntica ao atual · heatmap visual funcionando
+T3.4
+Refatorar r_vendas.js, r_oportunidades.js, r_atrito.js
+Antigravity
+T3.1
+Paridade de renderização · novos campos (realistically_addressable, ROI) visíveis
+T3.5
+Refatorar r_nlp.js, r_comportamento.js, r_intencao_preditivo.js
+Antigravity
+T3.2
+Todos os campos do schema 7.1 renderizando · tendências temporais visíveis
+T3.6
+Refatorar r_falantes_fases.js, r_compliance_followup.js
+Antigravity
+T3.1
+compliance_alerts visíveis · follow_up estruturado · gráfico de ratio de fala
+T3.7
+Dashboard de benchmarking — ranking por vendedor, evolução temporal, outliers, correlações
+Antigravity
+T3.2
+Ranking com ≥5 vendedores · evolução com ≥4 semanas · outlier identificável
+T3.8
+Transcrição interativa — highlights de entidades, busca, edição manual com flag edited, fases no player
+Antigravity
+T3.1
+Produtos/preços/concorrentes destacados · busca funcional · fases na timeline do player
+T3.9
+Exportação PDF e impressão via CSS · agendamento de relatórios por email
+Antigravity
+T3.7
+PDF gerado <5s · CSS de impressão sem backend · email em frequência configurável
+T3.10
+Implementar 5 perfis de acesso com RLS granular (Admin, Gerente Regional, Gerente Loja, Vendedor, Auditor)
+Antigravity
+T3.7
+Auditor vê apenas suas conversas · Gerente Regional vê apenas sua região
+FASE
+4
+AGENTES ADICIONAIS — SIMULADOR, BIBLIOTECA, ANÁLISE DE ÁUDIO
+A8 · A9 operacionais · análise prosódica local · ~3 semanas
+ID
+Tarefa
+Executor
+Depende de
+Critério de Aceitação
+T4.1
+Endpoint /functions/search-practices — query em linguagem natural → embedding local → cosine pgvector → resultados
+Antigravity
+T2.10
+Query retorna ≥3 conversas relevantes em <1s · filtros por store_id e skill_tag · zero API call de embedding
+T4.2
+UI da biblioteca de práticas — busca, resultado com context_summary, áudio de referência, tag por habilidade (#18)
+Antigravity
+T4.1
+Interface funcional · context_summary do A9 exibido · link para transcrição · filtro por skill_tag
+T4.3
+Correlações de eficácia na biblioteca — argumentos que convertem · respostas que funcionam (#18.5-18.8)
+Antigravity
+T3.2
+SQL LOCAL sobre objections × sale_completed e checklist × sale_completed · sem LLM
+T4.4
+Implementar A8 — gerador de persona, motor de simulação com estado, avaliador de turno, feedback
+Antigravity
+T2.13
+Persona coerente em 10+ turnos · objeções configuradas aparecem contextualmente · feedback por turno acionável
+T4.5
+UI do simulador (#35) — seleção de persona, interface de chat, feedback, histórico, progressão de dificuldade
+Antigravity
+T4.4
+Sessão funcional end-to-end · difficulty_level configurável · sessões salvas em simulation_sessions
+T4.6
+Análise de features de áudio (#3.12, #13.5, #13.6) — pitch, energia de voz, pausas com VAD local
+Antigravity
+T1.5
+librosa/pyannote local · pitch_avg, pitch_variance, discomfort_signal, significant_silence · zero API call
+T4.7
+Anotações em trechos da transcrição (#28.7) e compartilhamento de trecho com timestamp (#27.6)
+Antigravity
+T3.8
+Anotação visível na transcrição · link com ?t=SECONDS inicia player no momento correto
+FASE
+5
+INTELIGÊNCIA AVANÇADA — PREDITIVA, CONSTRUTOR, INTEGRAÇÕES CRM
+Diferenciação competitiva · ~3 semanas
+ID
+Tarefa
+Executor
+Depende de
+Critério de Aceitação
+T5.1
+Construtor de checklist genérico personalizável (#5.2) — UI item a item, pesos, obrigatório/desejável, keywords
+Antigravity
+T3.10
+Checklist customizado executável pelo A1 configurável · pesos editáveis via UI
+T5.2
+Análise preditiva (#39) — churn_risk, projected_ticket, best_follow_up_window via SQL histórico
+Antigravity
+T3.2
+Campos calculados para conversas com ≥5 anteriores · modelo SQL puro (não LLM)
+T5.3
+Construtor de prompts customizados (#4) — editor, schema JSON, testador, versionamento, templates
+Antigravity
+T2.13
+Prompt customizado executável · versionamento funcional · 5 templates base
+T5.4
+Config de triggers de análise (#4.13-4.15) — tabela analysis_triggers + cron via Edge Function
+Antigravity
+T5.3
+Trigger condicional (só_venda, agendado) funcional · execução em lote
+T5.5
+Integração CRM (#23.1) — Salesforce, HubSpot, RD Station, Pipedrive · OAuth + field mapping UI
+Antigravity
+T3.10
+Webhook funcional · sale_completed e valor real recebido do CRM · campos CRM-DEPENDENT preenchidos
+T5.6
+Integração PDV/ERP (#23.2-23.3) · estoque (#23.6) · promoções (#23.7)
+Antigravity
+T5.5
+sale_completed real sobrescreve proxy · items 8.5 (estoque) e 7.3.3 (promoções) fechados
+T5.7
+Alertas configuráveis (#30.2-30.7) · agendamento de relatórios por email (#22.8)
+Antigravity
+T3.10
+Alerta em <5s após evento · relatório HTML por email em frequência configurável
+T5.8
+UI de gestão do catálogo de produtos (#24) — CRUD com margin, scripts[], versões, complementares
+Antigravity
+T3.10
+Produto editado via UI reflete imediatamente em A6 · margin disponível para ROI
+T5.9
+Quiz automático (#21.8) e trilhas de aprendizado (#21.2)
+Antigravity
+T4.2
+Quiz de 5 perguntas geradas de conversas exemplares · trilha com sequência por habilidade
+T5.10
+Dashboard completo com todos os filtros dinâmicos, exportação de gráficos (#22.1-22.7)
+Antigravity
+T3.7
+3 visões distintas · filtros por período/loja/vendedor/produto · PNG/PDF de gráficos
+FASE
+6
+ECOSSISTEMA E ESCALA — MULTI-TENANT, API, GAMIFICAÇÃO, LGPD
+Produto completo · ~4 semanas
+ID
+Tarefa
+Executor
+Depende de
+Critério de Aceitação
+T6.1
+Multi-loja e multi-tenant (#25, #26) — hierarquia region>city>store · RLS por nível · 5 perfis completos
+Antigravity
+T5.10
+5 perfis com RLS correto · Gerente Regional vê só sua região · Vendedor vê só suas conversas
+T6.2
+API REST pública (#23.9) — API key por tenant, rate limiting, documentação OpenAPI
+Antigravity
+T6.1
+Endpoints documentados · rate limiting funcional · OpenAPI spec gerada
+T6.3
+Gamificação (#21.6) — pontos, badges, ranking com triggers Supabase automáticos
+Antigravity
+T3.7
+Trigger ao persistir conversa · pontos por checklist_score+intent_score · badge automático por marco
+T6.4
+Marketplace de análises (#36) — compartilhamento, avaliação, importação de prompts
+Antigravity
+T5.3
+Upload para marketplace · avaliação por estrelas · importação com 1 clique
+T6.5
+Compliance e privacidade LGPD (#38) — anonimização, consentimento, retenção, exportação
+Antigravity
+T6.1
+Campos is_inferred marcados · exportação de dados por usuário · política de retenção configurável
+T6.6
+PowerPoint automático (#29.5) e construtor de dashboard drag-and-drop (#22.4)
+Antigravity
+T5.10
+PPTX gerado <10s · ≥10 widgets disponíveis · layout salvo por usuário
+T6.7
+App mobile/QR Code (#1.1, #1.3, #1.7, #1.8) · WhatsApp Business (#23.5)
+Antigravity
+T6.1
+Upload via mobile · QR Code abre sessão de missão · mensagens WA registradas em follow_up_records
+T6.8
+Certificações internas (#21.9) e alertas em tempo real ao vivo (#30.1)
+Antigravity
+T6.3
+Certificação automática ao atingir critério · alerta ao vivo via WebSocket (alta complexidade)
+FASE
+7
+OBSERVABILIDADE E REFINAMENTO CONTÍNUO
+Produção estável · Calibração por dados reais · Ongoing
+ID
+Tarefa
+Executor
+Depende de
+Critério de Aceitação
+T7.1
+Dashboard de qualidade dos agentes — taxa de re-execução, confidence médio, schema failures, distribuição de verdicts
+Antigravity
+T6.2
+Painel interno para admin · alerta quando re-execução A1 >20% ou confidence médio A3 <40
+T7.2
+Calibração semestral do A3 (intenção) — 20 transcrições anotadas por humanos com score esperado
+MANUAL
+T6.2
+Desvio médio entre score A3 e esperado <15 pontos · prompt ajustado se desvio >15
+T7.3
+Review trimestral das ontologias — checklist, catálogo, taxonomia de objeções
+MANUAL
+T6.2
+Changelog documentado · pipeline re-testado com 3 transcrições antes de deploy
+T7.4
+Avaliação de recall da biblioteca (#18) — feedback de relevância · precision@5
+MANUAL
+T4.2
+Feedback 1-5 estrelas em resultados · precision@5 ≥80% em 20 queries reais
+T7.5
+Expansão de personas e cenários do simulador (#35) — ≥10 personas, ≥3 cenários por arquétipo
+MANUAL + Antigravity
+T4.5
+10 personas distintas documentadas · cenários em 3 dificuldades por arquétipo
+T7.6
+Deprecação do /classify e remoção do botão v1 do dashboard
+Antigravity
+T7.1-T7.3
+0 conversas pelo /classify nos últimos 7 dias · botão v1 removido · migração completa
+9. Riscos Críticos e Itens com Dependências Externas
+9.1 Mapa de Riscos
+Risco
+Prob.
+Impacto
+Mitigação
+Role assignment incorreto no parser (E1) — invalida checklist e métricas de fala inteiros
+Alta em áudios sem marcadores
+Crítico
+confidence_score + manual_review flag + UI de correção de role antes de processar · T1.6
+Schema de tabelas alterado após Fase 2 — migração em cascata em todos os agentes
+Média — pressão de features novas
+Alto
+RFC process obrigatório para mudanças · schema revisado manualmente antes de T1.4 · ver Seção 7
+LLM produz score de intenção inflado (viés de positividade do A3)
+Alta — comportamento padrão
+Médio
+Proxies locais D1-D4 ancoram o score antes do LLM · calibração semestral T7.2
+Latência alta do pipeline em produção (>45s)
+Média — 9 agentes
+Médio
+Janelas A e B de paralelismo · timeout de 15s por agente com fallback para INCONCLUSIVO · telemetria por agente
+Custo LLM por conversa acima do esperado
+Baixa com janelas calibradas
+Médio
+Telemetria por agente desde T2.11 · alerta de custo · fallback para modelo menor
+Dados demográficos inferidos usados como fatos — risco LGPD
+Média — UX descuidada
+Alto
+is_inferred=true obrigatório em todos os campos · disclaimer obrigatório na UI · política de retenção diferenciada
+Ontologias desatualizadas após novos produtos ou objeções
+Alta ao longo do tempo
+Médio
+Review trimestral T7.3 · rate de detecção monitorado no dashboard T7.1
+Qualidade de áudio muito baixa — parser corrompido
+Média
+Alto
+Pré-processamento VAD + SNR T1.5 · quality_warning flag · manual_review para SNR abaixo do threshold
+9.2 Itens CRM-Dependent — null até integração Fase 5
+Os itens abaixo retornam null com flag CRM_REQUIRED até que a integração CRM/PDV seja completada na Fase 5. NUNCA devem ser inferidos pelo LLM a partir da transcrição — o LLM não tem esses dados e alucinaria.
+Item da lista
+Dado necessário
+Fonte
+Fase de desbloqueio
+#16.3 Frequência de compra
+Histórico de visitas do cliente
+CRM
+5 (T5.5)
+#16.5 Padrão de gasto histórico
+Ticket médio histórico por cliente
+CRM
+5 (T5.5)
+#16.6 LTV estimado
+Receita histórica × estimativa de retenção
+CRM
+5 (T5.5)
+#16.7 Canal de aquisição
+Como o cliente chegou (referência, campanha, passagem)
+CRM
+5 (T5.5)
+#16.8 Produtos preferidos historicamente
+Histórico de compras por cliente
+CRM + PDV
+5 (T5.6)
+#16.9 Sazonalidade de compra
+Datas de compras anteriores por cliente
+CRM
+5 (T5.5)
+#8.5 Produto pedido sem estoque
+Estoque atual por produto
+ERP/PDV
+5 (T5.6)
+#8.8 Correlação apresentados vs comprados
+Produto efetivamente comprado por transação
+PDV
+5 (T5.6)
+#9.12 Padrões de recompra
+Histórico de retorno por cliente
+CRM
+5 (T5.5)
+#6.3 Taxa de conversão real
+Venda efetivada por conversa
+PDV/CRM
+5 (T5.5-T5.6)
+9.3 Itens de Áudio — Análise Acústica Local (Fase 4)
+Os itens abaixo não são resolúveis via análise de texto da transcrição. Requerem extração de features acústicas do arquivo de áudio. Implementados na Fase 4 (T4.6) com librosa/pyannote rodando localmente — sem API call.
+Item
+Feature de áudio
+Fase
+Método local
+#3.12 Tom de voz (confiança, insegurança, entusiasmo)
+Pitch médio, variação de pitch, energia de voz por segmento
+4
+librosa local · pitch tracking · espectro de energia
+#13.5 Sinais de desconforto não verbalizados
+Variação de pitch + energia de voz após proposta vs baseline
+4
+Comparação de segmento pós-proposta
+#13.6 Silêncios significativos após proposta
+Silêncio >3s após turno com pergunta de fechamento
+4
+WebRTC VAD com timestamps precisos
+#2.4 Detecção de silêncios e pausas longas
+Silêncio > threshold configurável
+1
+librosa.effects.split · WebRTC VAD
+#2.6 Filtragem de conversas paralelas
+Diarização de múltiplos falantes simultâneos
+2
+pyannote.audio local
+9.4 Sequência de Início Imediato
+#
+Ação
+Executor
+Tempo
+Entrega
+1
+Revisar checklist_zeiss_v6.json — 22 itens com keywords testadas em transcrições reais
+MANUAL
+3-4h
+JSON validado · 0 falsos positivos em 5 transcrições
+2
+Criar product_catalog.json — todos os produtos, variações, complementaridade, margin, scripts[]
+MANUAL
+1-2h
+JSON com catálogo completo
+3
+Criar objection_taxonomy.json — 9 tipos com exemplos positivos e negativos reais
+MANUAL
+1h
+JSON com definições e exemplos de transcrição real
+4
+T1.4: SQL das 30 tabelas com RLS por 5 perfis
+Antigravity
+2-3h
+Tabelas no Supabase dev · RLS validado
+5
+T1.5: Módulo de pré-processamento de áudio (VAD, SNR, quality_warning) local
+Antigravity
+3h
+Roda localmente · quality_warning para áudio ruidoso
+6
+T1.6-T1.7: parser.js + extractor.js com testes unitários
+Antigravity
+4-6h
+≥90% acerto em role · produtos detectados · fases coerentes
+7
+T1.8: Validação manual com 3 transcrições reais
+MANUAL + Antigravity
+2h
+Checklist determinístico correto · segmentação de fase coerente
+8
+T2.1: /analyze-v2 com orquestrador e janelas A + B
+Antigravity
+3h
+Endpoint responsivo · telemetria registrada por agente
+9
+T2.2-T2.5: A1, A2, A4, A5 (Janela A) — todos com pré-filtro local
+Antigravity
+6-8h
+4 agentes com schema validado · pré-filtro local funcionando
+10
+T2.6-T2.7: A3 (proxies locais D1-D4) e A6 (gap local primeiro)
+Antigravity
+4-6h
+Proxies calculados localmente · gap de conjuntos sem LLM · total_value por código
+11
+T2.8: A7 síntese (nunca vê transcrição) + A9 embedding local
+Antigravity
+4h
+5 parágrafos · compliance coerente · embedding 384d local
+12
+T2.11-T2.13: Telemetria + validação e2e com 5 conversas reais
+MANUAL + Antigravity
+3-4h
+Output v2 consistente em 3 execuções · 20 top-level keys presentes
