@@ -1,0 +1,61 @@
+{
+    "agent_id": "agent3",
+    "description": "Avalia intenção de compra com Chain-of-Thought e evolução turno a turno",
+    "system": "Você é especialista em comportamento do consumidor e psicologia de vendas. Analise a transcrição e avalie a intenção de compra do cliente.\n\nCLASSIFICAÇÕES de intenção (use exatamente):\n- COMPROU: cliente efetuou a compra\n- PRONTO: alta intenção, pequenos obstáculos (score 70-100)\n- PESQUISANDO: intenção média, comparando opções (score 40-69)\n- BROWSING: baixa intenção, só explorando (score 0-39)\n- DESISTIU: saiu sem interesse real\n\nResponda APENAS em JSON válido. O campo cot_reasoning é OBRIGATÓRIO e deve conter seu raciocínio passo a passo antes de dar o score.",
+    "user": "TRANSCRIÇÃO DO ATENDIMENTO (atendimento_exemplo_01):\n\nVendedor: Boa tarde! Pode entrar!\nCliente: Boa tarde. Preciso de óculos novos, minha receita está desatualizada.\nVendedor: Vim na hora certa! Quando foi seu último óculos?\nCliente: Há 3 anos. Está incomodando bastante.\nVendedor: Entendo. Vamos fazer uma medição completa. Você dirige?\nCliente: Sim, todos os dias. Tenho dificuldade à noite.\nVendedor: Então a DriveSafe é ideal para você. [demonstração] Olha a diferença de claridade.\nCliente: Uau, realmente parece melhor. Quanto custa?\nVendedor: Com o pacote completo: R$ 2.200.\nCliente: Hmm. Posso parcelar?\nVendedor: Sim, em até 10x sem juros.\nCliente: É possível escolher a armação agora e ver o orçamento completo?\nVendedor: Claro! Vem cá que me mostra o que você gosta.",
+    "expected_schema": {
+        "intent_classification": {
+            "type": "enum",
+            "values": [
+                "COMPROU",
+                "PRONTO",
+                "PESQUISANDO",
+                "BROWSING",
+                "DESISTIU"
+            ],
+            "required": true
+        },
+        "intent_score": {
+            "type": "number",
+            "required": true,
+            "description": "0 a 100"
+        },
+        "cot_reasoning": {
+            "type": "string",
+            "required": true,
+            "description": "Cadeia de raciocínio passo a passo"
+        },
+        "urgency_detected": {
+            "type": "string",
+            "required": true,
+            "description": "true ou false como string"
+        },
+        "key_signals": {
+            "type": "list",
+            "required": true,
+            "description": "Sinais observados que indicam intenção"
+        },
+        "risk_factors": {
+            "type": "list",
+            "required": true,
+            "description": "Fatores que podem fazer o cliente desistir"
+        }
+    },
+    "expected_output_example": {
+        "intent_classification": "PRONTO",
+        "intent_score": 78,
+        "urgency_detected": "true",
+        "cot_reasoning": "1. Cliente veio com necessidade clara ('minha receita está desatualizada, incomodando bastante') — sinal forte de urgência. 2. Problema funcional real (dificuldade ao volante à noite) aumenta a pressão de compra. 3. Reagiu positivamente à demonstração DriveSafe ('Uau, realmente parece melhor'). 4. Perguntou sobre parcelamento — não descartou o preço, quer viabilizar a compra. 5. Pediu para ver orçamento completo com armação — engajamento alto, próximo de fechar. Score: 78/100.",
+        "key_signals": [
+            "Necessidade declarada com urgência ('incomodando bastante')",
+            "Problema funcional real com frequência (dirige todo dia à noite)",
+            "Reação positiva à demonstração",
+            "Pergunta sobre parcelamento (intenção de compra)",
+            "Pediu para montar orçamento completo"
+        ],
+        "risk_factors": [
+            "Preço acima de R$ 2.000 pode afastar",
+            "Não confirmou que pode fechar hoje"
+        ]
+    }
+}

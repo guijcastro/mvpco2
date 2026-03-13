@@ -1,0 +1,189 @@
+[
+    {
+        "id": "progressive",
+        "label": "Lente Progressiva",
+        "category": "lens_type",
+        "estimated_value": 1200,
+        "keywords": [
+            "progressiva",
+            "multifocal",
+            "progressive",
+            "lente progressiva",
+            "progressivo",
+            "ver de perto e longe",
+            "ver de longe e perto"
+        ]
+    },
+    {
+        "id": "single_vision",
+        "label": "Lente Monofocal (Single Vision)",
+        "category": "lens_type",
+        "estimated_value": 400,
+        "keywords": [
+            "monofocal",
+            "single vision",
+            "visão simples",
+            "lente simples",
+            "só de longe",
+            "só de perto"
+        ]
+    },
+    {
+        "id": "office",
+        "label": "Lente Office / Trabalho",
+        "category": "lens_type",
+        "estimated_value": 800,
+        "keywords": [
+            "lente office",
+            "lente escritório",
+            "lente de trabalho",
+            "para computador",
+            "intermediate",
+            "intermediária"
+        ]
+    },
+    {
+        "id": "drivesafe",
+        "label": "DriveSafe",
+        "category": "lens_feature",
+        "estimated_value": 800,
+        "keywords": [
+            "DriveSafe",
+            "drive safe",
+            "dirigir",
+            "visão noturna",
+            "claridade ao volante",
+            "halos",
+            "ofuscamento",
+            "cansaço ao dirigir"
+        ]
+    },
+    {
+        "id": "photofusion",
+        "label": "PhotoFusion X",
+        "category": "lens_feature",
+        "estimated_value": 600,
+        "keywords": [
+            "PhotoFusion",
+            "photo fusion",
+            "fotossensível",
+            "muda de cor",
+            "escurece no sol",
+            "transitions",
+            "fotocromático",
+            "escurece",
+            "clareia"
+        ]
+    },
+    {
+        "id": "blueguard",
+        "label": "BlueGuard",
+        "category": "lens_feature",
+        "estimated_value": 400,
+        "keywords": [
+            "BlueGuard",
+            "blue guard",
+            "luz azul",
+            "filtro azul",
+            "proteção digital",
+            "tela",
+            "computador",
+            "celular",
+            "luz LED"
+        ]
+    },
+    {
+        "id": "antireflexo",
+        "label": "Antirreflexo",
+        "category": "lens_feature",
+        "estimated_value": 300,
+        "keywords": [
+            "antirreflexo",
+            "anti-reflexo",
+            "reflexo",
+            "brilho na lente",
+            "sem reflexo",
+            "DuraVision"
+        ]
+    },
+    {
+        "id": "duravision",
+        "label": "DuraVision",
+        "category": "lens_feature",
+        "estimated_value": 350,
+        "keywords": [
+            "DuraVision",
+            "dura vision",
+            "resistente a riscos",
+            "blindagem",
+            "proteção da lente"
+        ]
+    },
+    {
+        "id": "iterminal",
+        "label": "iTerminal",
+        "category": "equipment",
+        "estimated_value": 0,
+        "keywords": [
+            "iTerminal",
+            "i terminal",
+            "equipamento de medição",
+            "medição digital",
+            "medir a centralização"
+        ]
+    },
+    {
+        "id": "visufit",
+        "label": "Visufit 1000",
+        "category": "equipment",
+        "estimated_value": 0,
+        "keywords": [
+            "Visufit",
+            "visufit",
+            "scanner facial",
+            "mapeamento facial",
+            "medir o rosto"
+        ]
+    },
+    {
+        "id": "visuconsult",
+        "label": "VisuConsult",
+        "category": "app",
+        "estimated_value": 0,
+        "keywords": [
+            "VisuConsult",
+            "visuconsult",
+            "aplicativo zeiss",
+            "app da zeiss",
+            "simulação de lente",
+            "ver como vai ficar a lente"
+        ]
+    },
+    {
+        "id": "armacao_premium",
+        "label": "Armação Premium / House Brand",
+        "category": "frame",
+        "estimated_value": 600,
+        "keywords": [
+            "armação premium",
+            "armação de grife",
+            "argento",
+            "silhouette",
+            "lindberg",
+            "titanium",
+            "acetato premium"
+        ]
+    },
+    {
+        "id": "armacao_basica",
+        "label": "Armação Básica",
+        "category": "frame",
+        "estimated_value": 200,
+        "keywords": [
+            "armação simples",
+            "modelo básico",
+            "armação de entrada",
+            "mais em conta"
+        ]
+    }
+]

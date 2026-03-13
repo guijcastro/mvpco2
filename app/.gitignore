@@ -1,0 +1,39 @@
+# Dependências do ambiente
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Node / Bun
+node_modules/
+bun.lock
+.bun/
+
+# spaCy models (baixar com python -m spacy download pt_core_news_lg)
+pt_core_news_lg/
+
+# Benchmark results (gerados localmente, não versionar)
+api/benchmark/results/
+
+# Corpus de teste com transcrições reais (dados sensíveis)
+api/tests/parsing/corpus/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.swp

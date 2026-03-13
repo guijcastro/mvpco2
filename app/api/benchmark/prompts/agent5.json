@@ -1,0 +1,75 @@
+{
+    "agent_id": "agent5",
+    "description": "Perfil psicológico do cliente e estilo de decisão",
+    "system": "Você é especialista em psicologia do consumidor e comportamento de compra. Com base nos sinais verbais na transcrição, infira o perfil psicológico do cliente.\n\nARQUÉTIPOS de cliente (use exatamente um):\n- RACIONAL: decide por dados, comparações e lógica. Quer especificações técnicas.\n- EMOCIONAL: decide por experiência, status e sentimento. Sensível a histórias e identificação.\n- SOCIAL: influenciado por referências, opiniões de terceiros e validação social.\n- CONSERVADOR: avesso a riscos, prefere o conhecido, teme errar na escolha.\n\nResponda APENAS em JSON válido.",
+    "user": "TRANSCRIÇÃO DO ATENDIMENTO (atendimento_exemplo_01):\n\nVendedor: O que está buscando hoje?\nCliente: Preciso de um progressivo. Vi um artigo comparando vários tipos de lente.\nVendedor: Ótimo! Qual artigo?\nCliente: Um que rankeava por qualidade de visão periférica e adaptação. A Zeiss ficou bem.\nVendedor: Exatamente! A Zeiss tem a maior zona de visão nítida do mercado.\nCliente: Tem dados sobre isso? Algum estudo clínico?\nVendedor: Sim, temos material técnico. Inclusive o iTerminal dá uma medição centralizada — reduz aberrações.\nCliente: Aberrações? Como funciona?\nVendedor: [explica tecnicamente] Em resumo: medição digital vs. régua convencional reduz erro em 30%.\nCliente: Faz sentido. Qual o preço?\nVendedor: R$ 2.400 com DuraVision e iTerminal.\nCliente: É. Posso ver a ficha técnica da lente?",
+    "expected_schema": {
+        "archetype": {
+            "type": "enum",
+            "values": [
+                "RACIONAL",
+                "EMOCIONAL",
+                "SOCIAL",
+                "CONSERVADOR"
+            ],
+            "required": true
+        },
+        "archetype_confidence": {
+            "type": "number",
+            "required": true,
+            "description": "0.0 a 1.0"
+        },
+        "decision_style": {
+            "type": "string",
+            "required": true,
+            "description": "Como este cliente toma decisões de compra"
+        },
+        "price_sensitivity": {
+            "type": "enum",
+            "values": [
+                "BAIXA",
+                "MEDIA",
+                "ALTA"
+            ],
+            "required": true
+        },
+        "risk_profile": {
+            "type": "enum",
+            "values": [
+                "ARROJADO",
+                "MODERADO",
+                "CONSERVADOR"
+            ],
+            "required": true
+        },
+        "communication_recommendations": {
+            "type": "list",
+            "required": true,
+            "description": "Como o vendedor deve se comunicar com este perfil"
+        },
+        "key_signals": {
+            "type": "list",
+            "required": true,
+            "description": "Evidências textuais do perfil identificado"
+        }
+    },
+    "expected_output_example": {
+        "archetype": "RACIONAL",
+        "archetype_confidence": 0.92,
+        "decision_style": "Pesquisa antes de comprar, busca validação por dados e estudos. Precisa entender o mecanismo antes de aceitar a proposta. Não compra por impulso.",
+        "price_sensitivity": "MEDIA",
+        "risk_profile": "MODERADO",
+        "communication_recommendations": [
+            "Use dados concretos e percentuais (ex: '30% menos aberrações')",
+            "Ofereça material técnico ou ficha da lente",
+            "Explique o mecanismo antes de citar o preço",
+            "Evite pressão emocional — prefere raciocinar sem pressa"
+        ],
+        "key_signals": [
+            "Leu artigo comparativo antes de vir à loja",
+            "Perguntou sobre estudos clínicos",
+            "Questionou o termo técnico 'aberrações' para entender",
+            "Pediu a ficha técnica da lente ao final"
+        ]
+    }
+}

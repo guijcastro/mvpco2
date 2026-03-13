@@ -1,0 +1,38 @@
+[
+    {
+        "id": "otica_diniz",
+        "label": "Óticas Diniz",
+        "keywords": [
+            "diniz",
+            "óticas diniz",
+            "otica diniz"
+        ]
+    },
+    {
+        "id": "otica_carol",
+        "label": "Óticas Carol",
+        "keywords": [
+            "carol",
+            "óticas carol",
+            "otica carol"
+        ]
+    },
+    {
+        "id": "chilli_beans",
+        "label": "Chilli Beans",
+        "keywords": [
+            "chilli beans",
+            "chillibeans"
+        ]
+    },
+    {
+        "id": "grandvision",
+        "label": "GrandVision",
+        "keywords": [
+            "grandvision",
+            "fototica",
+            "grand vision",
+            "fotótica"
+        ]
+    }
+]

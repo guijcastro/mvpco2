@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MVPCO — Batalha de Modelos Lado-a-Lado</title>
+    <meta name="description" content="Compare LLMs qualitativamente na fase A.2">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Navbar compacta */
+        nav {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 0.75rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .nav-brand {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .nav-brand span {
+            color: #3b82f6;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .nav-link {
+            padding: 0.4rem 0.75rem;
+            border-radius: 0.4rem;
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        #user-email {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .btn-logout {
+            padding: 0.35rem 0.75rem;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 0.4rem;
+            color: #f87171;
+            cursor: pointer;
+        }
+
+        /* Controles Topo */
+        .controls-bar {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: flex-end;
+            border-bottom: 1px solid #334155;
+            flex-shrink: 0;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .control-group label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .control-group select {
+            padding: 0.6rem 1rem;
+            border-radius: 0.5rem;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.875rem;
+            min-width: 200px;
+            outline: none;
+        }
+
+        .control-group select:focus {
+            border-color: #3b82f6;
+        }
+
+        .btn-launch {
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            padding: 0.6rem 2rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+            height: 38px;
+        }
+
+        .btn-launch:hover {
+            background: #2563eb;
+        }
+
+        .btn-launch:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Split View Workspace */
+        .split-view {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #334155;
+            background: #0f172a;
+        }
+
+        .column:last-child {
+            border-right: none;
+        }
+
+        .col-header {
+            background: #1e293b;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #334155;
+            flex-shrink: 0;
+        }
+
+        .col-metrics {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        .col-body {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #a5b4fc;
+            white-space: pre-wrap;
+        }
+
+        .json-error {
+            color: #f87171;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(2px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 1rem;
+            z-index: 10;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(59, 130, 246, 0.2);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Footer Votação */
+        .vote-footer {
+            background: #1e293b;
+            padding: 1rem;
+            border-top: 1px solid #334155;
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-shrink: 0;
+        }
+
+        .btn-vote {
+            padding: 0.75rem 2rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.1s;
+        }
+
+        .btn-vote:active {
+            transform: scale(0.98);
+        }
+
+        .btn-vote:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .vote-a {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .vote-a:hover:not(:disabled) {
+            background: rgba(16, 185, 129, 0.25);
+        }
+
+        .vote-tie {
+            background: rgba(148, 163, 184, 0.15);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .vote-tie:hover:not(:disabled) {
+            background: rgba(148, 163, 184, 0.25);
+        }
+
+        .vote-b {
+            background: rgba(56, 189, 248, 0.15);
+            color: #7dd3fc;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .vote-b:hover:not(:disabled) {
+            background: rgba(56, 189, 248, 0.25);
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <div class="nav-brand">MVP<span>CO</span></div>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Dashboard</a>
+            <a href="benchmark_visual.html" class="nav-link active">Batalha (IA)</a>
+            <a href="settings.html" class="nav-link">Configurações</a>
+        </div>
+        <div class="nav-right">
+            <span id="user-email"></span>
+            <button class="btn-logout" onclick="logout()">Sair</button>
+        </div>
+    </nav>
+
+    <div class="controls-bar">
+        <div class="control-group">
+            <label>Tarefa (Agente)</label>
+            <select id="sel-agent">
+                <option value="agent1">A1 - Checklist Zeiss (15 itens)</option>
+                <option value="agent2" selected>A2 - Objeções de Vendas</option>
+                <option value="agent3">A3 - Intenção de Compra (CoT)</option>
+                <option value="agent4">A4 - Sentimento e Emoção</option>
+                <option value="agent5">A5 - Perfil do Cliente</option>
+                <option value="agent6">A6 - Oportunidades Perdidas</option>
+                <option value="agent7">A7 - Síntese Executiva</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>Modelo A (Esquerda)</label>
+            <select id="sel-model-a">
+                <option value="gpt-5.2">OpenAI - GPT-5.2</option>
+                <option value="claude-sonnet-4-6">Anthropic - Claude Sonnet 4.6</option>
+                <option value="gemini/gemini-2.5-pro">Google - Gemini 2.5 Pro</option>
+                <option value="xai/grok-3">xAI - Grok 3</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>Modelo B (Direita)</label>
+            <select id="sel-model-b">
+                <option value="claude-sonnet-4-6" selected>Anthropic - Claude Sonnet 4.6</option>
+                <option value="gpt-5.2">OpenAI - GPT-5.2</option>
+                <option value="gemini/gemini-2.5-pro">Google - Gemini 2.5 Pro</option>
+                <option value="xai/grok-3">xAI - Grok 3</option>
+            </select>
+        </div>
+
+        <button class="btn-launch" id="btn-fight" onclick="launchDuel()">Lutar! ⚔️</button>
+    </div>
+
+    <div class="split-view">
+        <div class="loading-overlay" id="loading">
+            <div class="loading-spinner"></div>
+            <div style="color: #94a3b8; font-weight: 500;">Modelos analisando o áudio simultaneamente...</div>
+        </div>
+
+        <!-- Coluna A -->
+        <div class="column">
+            <div class="col-header">
+                <span id="header-a">Modelo A</span>
+                <span class="col-metrics" id="metrics-a">-- ms | Schema: ?</span>
+            </div>
+            <div class="col-body" id="body-a">Os resultados do Modelo A aparecerão aqui para você julgar.</div>
+        </div>
+
+        <!-- Coluna B -->
+        <div class="column">
+            <div class="col-header">
+                <span id="header-b">Modelo B</span>
+                <span class="col-metrics" id="metrics-b">-- ms | Schema: ?</span>
+            </div>
+            <div class="col-body" id="body-b">Os resultados do Modelo B aparecerão aqui para você julgar.</div>
+        </div>
+    </div>
+
+    <div class="vote-footer">
+        <button class="btn-vote vote-a" id="btn-vote-a" disabled onclick="submitVote('A')">🏆 Modelo A Analisou
+            Melhor</button>
+        <button class="btn-vote vote-tie" id="btn-vote-tie" disabled onclick="submitVote('TIE')">⚖️ Empate
+            Técnico</button>
+        <button class="btn-vote vote-b" id="btn-vote-b" disabled onclick="submitVote('B')">🏆 Modelo B Analisou
+            Melhor</button>
+    </div>
+
+    <script>
+        const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        const API = window.API_BASE;
+        let token = null;
+        let currentUser = null;
+        let lastDuelData = null; // Para salvar os nomes dos modelos no voto
+
+        async function init() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) return (window.location.href = 'login.html');
+            token = session.access_token;
+            currentUser = session.user;
+            document.getElementById('user-email').textContent = session.user.email;
+        }
+
+        function syntaxHighlight(jsonObj) {
+            if (typeof jsonObj !== 'string') {
+                jsonObj = JSON.stringify(jsonObj, undefined, 2);
+            }
+            jsonObj = jsonObj.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return jsonObj.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'color: #38bdf8;'; // value string
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) { cls = 'color: #94a3b8;'; } // key
+                } else if (/true|false/.test(match)) { cls = 'color: #fca5a5;'; } // boolean
+                else if (/null/.test(match)) { cls = 'color: #fbbf24;'; } // null
+                else { cls = 'color: #a7f3d0;'; } // number
+                return '<span style="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function renderCol(suffix, data, modelName) {
+            document.getElementById(`header-${suffix}`).textContent = modelName;
+
+            if (data.status === 'error') {
+                document.getElementById(`metrics-${suffix}`).innerHTML = `<span style="color:#f87171">Erro de Execução</span>`;
+                document.getElementById(`body-${suffix}`).innerHTML = `<span class="json-error">${data.error}</span>\n\nRaw:\n${data.raw_content}`;
+                return;
+            }
+
+            const schemaColor = data.schema_valid ? '#34d399' : '#f87171';
+            const schemaText = data.schema_valid ? 'Perfeito' : 'Inválido';
+            document.getElementById(`metrics-${suffix}`).innerHTML = `
+                ${data.latency} ms | Schema: <span style="color:${schemaColor}">${schemaText}</span>
+            `;
+
+            let bodyHtml = '';
+            if (!data.schema_valid) {
+                bodyHtml += `<div style="background: rgba(248, 113, 113, 0.1); padding: 0.5rem; border-radius: 4px; border: 1px solid rgba(248,113,113,0.3); margin-bottom: 1rem; color: #fca5a5;">
+                    Falhas de Schema Python (Pydantic):<br> - ${data.schema_errors.join('<br> - ')}
+                </div>`;
+            }
+
+            if (data.parsed_json) {
+                bodyHtml += syntaxHighlight(data.parsed_json);
+            } else {
+                bodyHtml += `<span class="json-error">O modelo enlouqueceu e não devolveu JSON.</span>\n\nTexto Retornado:\n${data.raw_content}`;
+            }
+
+            document.getElementById(`body-${suffix}`).innerHTML = bodyHtml;
+        }
+
+        async function launchDuel() {
+            if (!token) return alert("Erro de autenticação.");
+
+            const agentId = document.getElementById('sel-agent').value;
+            const modelA = document.getElementById('sel-model-a').value;
+            const modelB = document.getElementById('sel-model-b').value;
+
+            if (modelA === modelB) {
+                alert("Escolha dois modelos diferentes para duelar.");
+                return;
+            }
+
+            lastDuelData = { agent_id: agentId, model_a: modelA, model_b: modelB };
+
+            // Toggle UI
+            document.getElementById('loading').style.display = 'flex';
+            document.getElementById('btn-fight').disabled = true;
+            document.getElementById('btn-vote-a').disabled = true;
+            document.getElementById('btn-vote-tie').disabled = true;
+            document.getElementById('btn-vote-b').disabled = true;
+
+            try {
+                const res = await fetch(`${API}/api/benchmark/duel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ agent_id: agentId, model_a: modelA, model_b: modelB })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.detail || 'Erro na execução.');
+
+                renderCol('a', data.model_a, modelA);
+                renderCol('b', data.model_b, modelB);
+
+                // Enable voting
+                document.getElementById('btn-vote-a').disabled = false;
+                document.getElementById('btn-vote-tie').disabled = false;
+                document.getElementById('btn-vote-b').disabled = false;
+
+            } catch (err) {
+                alert(`Erro ao rodar modelos: ${err.message}`);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('btn-fight').disabled = false;
+            }
+        }
+
+        async function submitVote(winnerArg) {
+            if (!lastDuelData) return;
+
+            let winnerName = 'TIE';
+            if (winnerArg === 'A') winnerName = lastDuelData.model_a;
+            else if (winnerArg === 'B') winnerName = lastDuelData.model_b;
+
+            const notes = prompt("Quer deixar algum comentário sobre por que esse modelo venceu? (Opcional)");
+            if (notes === null) return; // Cancelou o prompt
+
+            try {
+                const { error } = await supabaseClient.from('benchmark_votes').insert([{
+                    user_id: currentUser.id,
+                    agent_id: lastDuelData.agent_id,
+                    model_a: lastDuelData.model_a,
+                    model_b: lastDuelData.model_b,
+                    winner_model: winnerName,
+                    notes: notes
+                }]);
+
+                if (error) throw error;
+
+                alert("Voto registrado com sucesso no Supabase! Vá para a próxima batalha.");
+
+                // Disable vote buttons to prevent duplicate votes for the same run
+                document.getElementById('btn-vote-a').disabled = true;
+                document.getElementById('btn-vote-tie').disabled = true;
+                document.getElementById('btn-vote-b').disabled = true;
+
+            } catch (err) {
+                alert(`Erro ao salvar voto no banco de dados: ${err.message}`);
+                console.error(err);
+            }
+        }
+
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            window.location.href = 'login.html';
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

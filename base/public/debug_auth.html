@@ -1,0 +1,82 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Debug Supabase</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+</head>
+
+<body style="font-family: monospace; padding: 20px;">
+    <h1>Supabase Connection Debugger</h1>
+
+    <h3>1. Check Configuration</h3>
+    <div id="config-status">Checking...</div>
+
+    <h3>2. Test Connection (List Users - Public Table)</h3>
+    <button onclick="testConnection()">Test Connection</button>
+    <pre id="connection-result" style="background: #eee; padding: 10px;"></pre>
+
+    <h3>3. Test Login</h3>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="testLogin()">Test Login</button>
+    <pre id="login-result" style="background: #eee; padding: 10px;"></pre>
+
+    <script>
+        const configStatus = document.getElementById('config-status');
+        let supabaseClient;
+
+        try {
+            const url = window.SUPABASE_URL || localStorage.getItem('SUPABASE_URL');
+            const key = window.SUPABASE_KEY || localStorage.getItem('SUPABASE_KEY');
+
+            if (url && key) {
+                configStatus.innerHTML = `âœ… Keys Found:<br>URL: ${url}<br>Key: ${key.substring(0, 10)}...`;
+                // window.supabase is the library namespace
+                supabaseClient = window.supabase.createClient(url, key);
+            } else {
+                configStatus.innerHTML = "âŒ Keys NOT Found in window or localStorage.";
+            }
+        } catch (e) {
+            configStatus.innerHTML = "âŒ Error initializing: " + e.message;
+        }
+
+        async function testConnection() {
+            if (!supabaseClient) {
+                alert("Supabase SDK not initialized. Check the status at the top of the page.");
+                return;
+            }
+            document.getElementById('connection-result').textContent = "Testing...";
+            // Try to fetch something public or just get session
+            const { data, error } = await supabaseClient.from('audio_files').select('count', { count: 'exact', head: true });
+
+            if (error) {
+                document.getElementById('connection-result').textContent = "âŒ Connection Failed: " + JSON.stringify(error, null, 2);
+            } else {
+                document.getElementById('connection-result').textContent = "âœ… Connection Successful! (Supabase is reachable)";
+            }
+        }
+
+        async function testLogin() {
+            if (!supabaseClient) {
+                alert("Supabase SDK not initialized. Check the status at the top of the page.");
+                return;
+            }
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            document.getElementById('login-result').textContent = "Logging in...";
+
+            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+            if (error) {
+                document.getElementById('login-result').textContent = "âŒ Login Failed:\n" + JSON.stringify(error, null, 2);
+            } else {
+                document.getElementById('login-result').textContent = "âœ… Login Successful!\nUser ID: " + data.user.id + "\nEmail: " + data.user.email;
+            }
+        }
+    </script>
+</body>
+
+</html>

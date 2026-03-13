@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MVPCO — Configurações</title>
+    <meta name="description" content="Configure suas chaves de API dos modelos de IA.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        nav {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .nav-brand span {
+            color: #3b82f6;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .nav-link {
+            padding: 0.4rem 0.75rem;
+            border-radius: 0.4rem;
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        #user-email {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .btn-logout {
+            padding: 0.35rem 0.75rem;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 0.4rem;
+            color: #f87171;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        main {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .page-header {
+            margin-bottom: 2rem;
+        }
+
+        .page-header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .page-header p {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 1rem;
+        }
+
+        /* API Keys cards */
+        .keys-grid {
+            display: grid;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .key-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0.75rem;
+            padding: 1.25rem 1.5rem;
+            transition: border-color 0.2s;
+        }
+
+        .key-card.configured {
+            border-color: rgba(34, 197, 94, 0.2);
+        }
+
+        .key-card.configured:hover {
+            border-color: rgba(34, 197, 94, 0.35);
+        }
+
+        .key-card:not(.configured):hover {
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+
+        .key-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .provider-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .provider-icon {
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .icon-openai {
+            background: rgba(16, 163, 127, 0.15);
+        }
+
+        .icon-anthropic {
+            background: rgba(207, 114, 55, 0.15);
+        }
+
+        .icon-google {
+            background: rgba(66, 133, 244, 0.15);
+        }
+
+        .icon-xai {
+            background: rgba(148, 163, 184, 0.15);
+        }
+
+        .provider-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .provider-model {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.1rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .badge-ok {
+            background: rgba(34, 197, 94, 0.12);
+            color: #86efac;
+        }
+
+        .badge-missing {
+            background: rgba(100, 116, 139, 0.15);
+            color: #94a3b8;
+        }
+
+        .key-input-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .key-input {
+            flex: 1;
+            padding: 0.6rem 0.9rem;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+            color: #fff;
+            font-size: 0.85rem;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .key-input:focus {
+            border-color: #3b82f6;
+        }
+
+        .key-input::placeholder {
+            color: #475569;
+            font-size: 0.8rem;
+        }
+
+        .btn {
+            padding: 0.55rem 1rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-save {
+            background: #3b82f6;
+            color: #fff;
+        }
+
+        .btn-save:hover {
+            background: #2563eb;
+        }
+
+        .btn-save:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-test {
+            background: rgba(34, 197, 94, 0.15);
+            color: #86efac;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .btn-test:hover {
+            background: rgba(34, 197, 94, 0.25);
+        }
+
+        .btn-test:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-remove {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.15);
+        }
+
+        .btn-remove:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .feedback {
+            margin-top: 0.5rem;
+            font-size: 0.78rem;
+            min-height: 1rem;
+        }
+
+        .feedback.ok {
+            color: #86efac;
+        }
+
+        .feedback.err {
+            color: #f87171;
+        }
+
+        .feedback.inf {
+            color: #93c5fd;
+        }
+
+        .hint-text {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+            font-family: monospace;
+        }
+
+        .info-box {
+            background: rgba(59, 130, 246, 0.07);
+            border: 1px solid rgba(59, 130, 246, 0.15);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            font-size: 0.82rem;
+            color: #93c5fd;
+            line-height: 1.6;
+        }
+
+        .info-box strong {
+            color: #60a5fa;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <div class="nav-brand">MVP<span>CO</span></div>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Dashboard</a>
+            <a href="upload.html" class="nav-link">Upload</a>
+            <a href="relatorio.html" class="nav-link">Relatórios</a>
+            <a href="settings.html" class="nav-link active">Configurações</a>
+        </div>
+        <div class="nav-right">
+            <span id="user-email"></span>
+            <button class="btn-logout" onclick="logout()">Sair</button>
+        </div>
+    </nav>
+
+    <main>
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <h1>Configurações</h1>
+                <p>Gerencie suas chaves de API para os modelos de IA</p>
+            </div>
+            <div style="text-align: right;">
+                <button class="btn btn-test" onclick="copyToken(this)"
+                    style="margin-bottom: 0.5rem; transition: all 0.2s;">Copiar meu JWT (Token)</button>
+                <div style="font-size: 0.70rem; color: #64748b; font-family: 'Inter', sans-serif;">Use este token para
+                    rodar<br>o benchmark no terminal.</div>
+            </div>
+        </div>
+
+        <div class="section-title">Chaves de API dos Modelos de IA</div>
+
+        <div class="keys-grid" id="keys-grid">
+            <!-- Cards gerados via JS -->
+        </div>
+
+        <div class="info-box">
+            🔒 <strong>Suas chaves são armazenadas de forma criptografada.</strong>
+            Elas nunca aparecem em texto claro após salvas — apenas os últimos 4 caracteres são exibidos como
+            confirmação.
+            A criptografia usa Fernet (AES-128-CBC + HMAC), processada no servidor Python.
+            Use o botão <strong>"Testar"</strong> para verificar se a chave está funcional antes de rodar análises.
+        </div>
+    </main>
+
+    <script>
+        const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        const API = window.API_BASE;
+
+        const PROVIDERS = [
+            { id: 'openai', name: 'OpenAI', icon: '🤖', iconClass: 'icon-openai', model: 'GPT-5.2', placeholder: 'sk-proj-...' },
+            { id: 'anthropic', name: 'Anthropic', icon: '🧠', iconClass: 'icon-anthropic', model: 'Claude Sonnet 4.6', placeholder: 'sk-ant-api...' },
+            { id: 'google', name: 'Google', icon: '✨', iconClass: 'icon-google', model: 'Gemini 2.5 Pro', placeholder: 'AIzaSy...' },
+            { id: 'xai', name: 'xAI', icon: '⚡', iconClass: 'icon-xai', model: 'Grok-3', placeholder: 'xai-...' },
+        ];
+
+        let token = null;
+        let keyStatus = {};
+
+        async function init() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) return (window.location.href = 'login.html');
+            token = session.access_token;
+            document.getElementById('user-email').textContent = session.user.email;
+            await loadKeyStatus();
+            renderCards();
+        }
+
+        async function loadKeyStatus() {
+            try {
+                const res = await fetch(`${API}/api/settings/keys`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                keyStatus = {};
+                data.forEach(k => { keyStatus[k.provider] = k; });
+            } catch (err) {
+                console.warn('Não foi possível carregar status das chaves:', err.message);
+            }
+        }
+
+        function renderCards() {
+            const grid = document.getElementById('keys-grid');
+            grid.innerHTML = PROVIDERS.map(p => {
+                const status = keyStatus[p.id];
+                const ok = status?.configured;
+                const hint = status?.key_hint || '';
+                return `
+          <div class="key-card ${ok ? 'configured' : ''}" id="card-${p.id}">
+            <div class="key-header">
+              <div class="provider-info">
+                <div class="provider-icon ${p.iconClass}">${p.icon}</div>
+                <div>
+                  <div class="provider-name">${p.name}</div>
+                  <div class="provider-model">${p.model}</div>
+                </div>
+              </div>
+              <span class="status-badge ${ok ? 'badge-ok' : 'badge-missing'}">
+                ${ok ? '✓ Configurada' : '○ Não configurada'}
+              </span>
+            </div>
+
+            ${ok ? `<div class="hint-text">Chave atual: ${hint}</div>` : ''}
+
+            <div class="key-input-row">
+              <input
+                type="password"
+                class="key-input"
+                id="input-${p.id}"
+                placeholder="${ok ? 'Digite a nova chave para substituir' : p.placeholder}"
+                autocomplete="new-password"
+              >
+              <button class="btn btn-save" onclick="saveKey('${p.id}', this)">Salvar</button>
+              ${ok ? `
+                <button class="btn btn-test"   onclick="testKey('${p.id}', this)">Testar</button>
+                <button class="btn btn-remove" onclick="removeKey('${p.id}', this)">✕</button>
+              ` : ''}
+            </div>
+            <div class="feedback" id="fb-${p.id}"></div>
+          </div>
+        `;
+            }).join('');
+        }
+
+        function setFeedback(provider, msg, type) {
+            const el = document.getElementById(`fb-${provider}`);
+            if (el) { el.textContent = msg; el.className = `feedback ${type}`; }
+        }
+
+        async function saveKey(provider, btn) {
+            const input = document.getElementById(`input-${provider}`);
+            const key = input.value.trim();
+            if (!key) return setFeedback(provider, 'Digite a chave antes de salvar.', 'err');
+
+            btn.disabled = true;
+            btn.textContent = 'Salvando...';
+            setFeedback(provider, '', '');
+
+            try {
+                const res = await fetch(`${API}/api/settings/keys`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ provider, api_key: key }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Erro ao salvar');
+                setFeedback(provider, `✓ Chave salva com sucesso (${data.hint})`, 'ok');
+                input.value = '';
+                await loadKeyStatus();
+                renderCards();
+            } catch (err) {
+                setFeedback(provider, `✗ ${err.message}`, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Salvar';
+            }
+        }
+
+        async function testKey(provider, btn) {
+            btn.disabled = true;
+            btn.textContent = '...';
+            setFeedback(provider, 'Testando conexão...', 'inf');
+
+            try {
+                const res = await fetch(`${API}/api/settings/keys/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ provider }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Falhou');
+                setFeedback(provider, `✓ Chave válida — testado com ${data.model_tested}`, 'ok');
+            } catch (err) {
+                setFeedback(provider, `✗ ${err.message}`, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Testar';
+            }
+        }
+
+        async function removeKey(provider, btn) {
+            if (!confirm(`Remover a chave de ${provider}?`)) return;
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${API}/api/settings/keys/${provider}`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) throw new Error('Erro ao remover');
+                setFeedback(provider, '✓ Chave removida', 'ok');
+                await loadKeyStatus();
+                renderCards();
+            } catch (err) {
+                setFeedback(provider, `✗ ${err.message}`, 'err');
+                btn.disabled = false;
+            }
+        }
+
+        async function copyToken(btn) {
+            if (!token) {
+                return alert('Token não encontrado. Faça login novamente.');
+            }
+            try {
+                await navigator.clipboard.writeText(token);
+                const originalText = btn.textContent;
+                btn.textContent = 'Copiado!';
+                btn.style.backgroundColor = 'rgba(34, 197, 94, 0.4)';
+                btn.style.color = '#fff';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.backgroundColor = '';
+                    btn.style.color = '';
+                }, 2000);
+            } catch (err) {
+                console.error('Erro ao copiar JWT', err);
+                prompt('Como seu navegador bloqueou a cópia automática, copie o JWT abaixo:', token);
+            }
+        }
+
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            window.location.href = 'login.html';
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

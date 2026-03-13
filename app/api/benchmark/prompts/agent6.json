@@ -1,0 +1,61 @@
+{
+    "agent_id": "agent6",
+    "description": "Detecta oportunidades de venda perdidas (cross-sell, up-sell, needs implícitas)",
+    "system": "Você é especialista em análise de oportunidades de venda em varejo ótico. Analise a transcrição e identifique produtos que poderiam ter sido ofertados mas não foram, necessidades implícitas não atendidas, e o impacto financeiro estimado.\n\nCATEGORIAS de oportunidade:\n- cross_sell: produto complementar não ofertado (ex: estojo, lenço, segunda armação)\n- upsell: versão superior não sugerida (ex: ofertou monofocal quando deveria sugerir progressiva)\n- implicit_need: necessidade verbalmente sinalizadas mas ignoradas pelo vendedor\n- product_not_shown: produto relevante para o perfil jamais mencionado\n\nResponda APENAS em JSON válido.",
+    "user": "TRANSCRIÇÃO DO ATENDIMENTO (atendimento_exemplo_01):\n\nVendedor: Boa tarde! O que posso fazer por você?\nCliente: Preciso de óculos de grau. Tenho astigmatismo e sou míope.\nVendedor: Temos várias opções. Qual seu orçamento?\nCliente: Até R$ 800.\nVendedor: Esse modelo aqui com lente monofocal básica fica R$ 700. [cliente experimenta] Ficou bem!\nCliente: Achei bom. Mas você tem algo que escurece no sol? Eu odeio ficar trocando de óculos.\nVendedor: Sim, temos o PhotoFusion, mas aí fica mais caro.\nCliente: Quanto mais?\nVendedor: R$ 1.200 com o PhotoFusion.\nCliente: Meu orçamento é R$ 800 mesmo. Vou levar o mais simples. Ah, e uso muito computador também.\nVendedor: Entendo. Vou embrulhar. Mais alguma coisa?\nCliente: Não, obrigado.",
+    "expected_schema": {
+        "missed_opportunities": {
+            "type": "list",
+            "required": true,
+            "description": "Lista de oportunidades perdidas"
+        },
+        "total_estimated_value_loss": {
+            "type": "number",
+            "required": true,
+            "description": "Valor total estimado não capturado"
+        },
+        "opportunity_summary": {
+            "type": "string",
+            "required": true,
+            "description": "Análise narrativa das oportunidades perdidas"
+        }
+    },
+    "expected_output_example": {
+        "missed_opportunities": [
+            {
+                "opportunity_type": "product_not_shown",
+                "product": "BlueGuard (proteção luz azul)",
+                "client_signal": "uso muito computador também",
+                "turn_id": 9,
+                "estimated_value": 400,
+                "recommendation": "Após cliente mencionar uso intenso de computador, vendedor deveria ter apresentado BlueGuard como adição natural"
+            },
+            {
+                "opportunity_type": "upsell",
+                "product": "Lente progressiva (em vez de monofocal)",
+                "client_signal": "não informado — acima de 40 anos, porém vendedor não qualificou",
+                "turn_id": 4,
+                "estimated_value": 800,
+                "recommendation": "Vendedor não perguntou a idade do cliente. Se >40 anos, progressiva seria mais adequada e agrega valor"
+            },
+            {
+                "opportunity_type": "implicit_need",
+                "product": "PhotoFusion (compra de conforto visual)",
+                "client_signal": "odeio ficar trocando de óculos",
+                "turn_id": 7,
+                "estimated_value": 500,
+                "recommendation": "Cliente sinalizou claramente o desejo. Vendedor apresentou mas desistiu ao primeiro sinal de resistência (orçamento). Deveria ter trabalhado o valor antes do preço."
+            },
+            {
+                "opportunity_type": "cross_sell",
+                "product": "Estojo + lenço de limpeza",
+                "client_signal": "Momento de fechamento — cliente já decidiu comprar",
+                "turn_id": 10,
+                "estimated_value": 80,
+                "recommendation": "No momento do fechamento, oferta de acessórios é padrão e tem alta conversão"
+            }
+        ],
+        "total_estimated_value_loss": 1780,
+        "opportunity_summary": "O atendimento capturou apenas R$ 700 de um potencial de R$ 2.480. A maior perda foi BlueGuard (não mencionado mesmo após sinal claro de uso de computador) e PhotoFusion (cliente desejava mas vendedor capitulou rapidamente)."
+    }
+}

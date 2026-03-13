@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MVPCO — Upload de Áudio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        /* ── Navbar ── */
+        nav {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .nav-brand span {
+            color: #3b82f6;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .nav-link {
+            padding: 0.4rem 0.75rem;
+            border-radius: 0.4rem;
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        #user-email {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .btn-logout {
+            padding: 0.35rem 0.75rem;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 0.4rem;
+            color: #f87171;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        /* ── Layout ── */
+        main {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .page-header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .page-header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .page-header p {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-top: 0.5rem;
+        }
+
+        /* ── Upload Card ── */
+        .upload-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        /* ── Form Fields ── */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .form-group label {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .full-width {
+            grid-column: span 2;
+        }
+
+        /* ── Dropzone ── */
+        .dropzone {
+            border: 2px dashed rgba(59, 130, 246, 0.4);
+            border-radius: 0.75rem;
+            padding: 3rem 2rem;
+            text-align: center;
+            background: rgba(59, 130, 246, 0.02);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            margin-top: 1rem;
+            position: relative;
+        }
+
+        .dropzone:hover,
+        .dropzone.dragover {
+            background: rgba(59, 130, 246, 0.08);
+            border-color: #3b82f6;
+        }
+
+        .drop-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #3b82f6;
+        }
+
+        .dropzone-text {
+            color: #e2e8f0;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .dropzone-hint {
+            color: #64748b;
+            font-size: 0.8rem;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        /* ── File Info & Progress ── */
+        .file-info {
+            display: none;
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .file-name {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #60a5fa;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 70%;
+        }
+
+        .file-size {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        /* ── Submit Button ── */
+        .btn-submit {
+            width: 100%;
+            padding: 1rem;
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1.5rem;
+            transition: background 0.2s, transform 0.1s;
+            display: none;
+        }
+
+        .btn-submit:hover {
+            background: #2563eb;
+        }
+
+        .btn-submit:active {
+            transform: scale(0.99);
+        }
+
+        .btn-submit:disabled {
+            background: #475569;
+            cursor: not-allowed;
+            color: #94a3b8;
+        }
+
+        /* ── Loader ── */
+        .processing-state {
+            display: none;
+            margin-top: 2rem;
+            text-align: center;
+        }
+
+        .loader-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            border-top-color: #3b82f6;
+            animation: spin 1s ease-in-out infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .processing-text {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+
+        .processing-steps {
+            margin-top: 1.5rem;
+            text-align: left;
+            max-width: 300px;
+            margin-inline: auto;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .step {
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .step.active {
+            color: #60a5fa;
+        }
+
+        .step.done {
+            color: #4ade80;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <div class="nav-brand">MVP<span>CO</span></div>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Dashboard</a>
+            <a href="upload.html" class="nav-link active">Upload</a>
+            <a href="relatorio.html" class="nav-link">Relatórios</a>
+            <a href="settings.html" class="nav-link">Configurações</a>
+        </div>
+        <div class="nav-right">
+            <span id="user-email"></span>
+            <button class="btn-logout" onclick="logout()">Sair</button>
+        </div>
+    </nav>
+
+    <main>
+        <div class="page-header">
+            <h1>Upload de Atendimento</h1>
+            <p>Envie o áudio de uma visita de cliente oculto para iniciar a extração e parsing.</p>
+        </div>
+
+        <div class="upload-card">
+            <!-- Metadados -->
+            <div class="form-grid" id="metadata-form">
+                <div class="form-group">
+                    <label for="store_name">Unidade / Loja</label>
+                    <input type="text" id="store_name" placeholder="Ex: Ótica Jardins">
+                </div>
+                <div class="form-group">
+                    <label for="vendor_name">Nome do Vendedor</label>
+                    <input type="text" id="vendor_name" placeholder="Ex: João Silva">
+                </div>
+                <div class="form-group">
+                    <label for="visit_date">Data do Atendimento</label>
+                    <input type="date" id="visit_date">
+                </div>
+                <div class="form-group">
+                    <label for="transcription_model">Motor de Transcrição</label>
+                    <select id="transcription_model"
+                        style="background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; font-family: 'Inter', sans-serif;">
+                        <option value="whisper">Whisper API (OpenAI)</option>
+                        <option value="gemini">Gemini 2.5 (Google)</option>
+                        <option value="local">Local (Whisper + Pyannote Audio)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Upload Area -->
+            <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+                <div class="drop-icon">🎧</div>
+                <div class="dropzone-text">Clique ou arraste o áudio aqui</div>
+                <div class="dropzone-hint">Suporta MP3, WAV, M4A, OGG (Máx: 25MB)</div>
+                <input type="file" id="file-input" accept="audio/*">
+            </div>
+
+            <div class="file-info" id="file-info">
+                <span class="file-name" id="file-name">Nenhum arquivo</span>
+                <span class="file-size" id="file-size">0 KB</span>
+            </div>
+
+            <button class="btn-submit" id="btn-submit" onclick="startUpload()">Transcrever Áudio &gt;</button>
+
+            <!-- Loading State -->
+            <div class="processing-state" id="processing-state">
+                <div class="loader-spinner"></div>
+                <div class="processing-text" id="processing-status-text">Iniciando processamento...</div>
+
+                <div class="processing-steps" id="realtime-steps">
+                    <!-- Passos injetados via JS -->
+                </div>
+            </div>
+
+            <!-- Visual Parser Tracker -->
+            <div id="parser-visualizer"
+                style="display: none; margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2rem;">
+                <h3 style="color: #fff; margin-bottom: 1rem; text-align: center; font-size: 1.1rem;">Estrutura do
+                    Diálogo Extraída (Parser E1)</h3>
+                <div class="metrics-row"
+                    style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 1.5rem; font-size: 0.85rem; color: #94a3b8;">
+                    <span id="vp-method">Heurística: --</span> |
+                    <span id="vp-confidence">Confiança (Accuracy): --</span> |
+                    <span id="vp-review">Revisão Humana Exigida: --</span>
+                </div>
+                <div id="turns-container"
+                    style="display: flex; flex-direction: column; gap: 1rem; max-height: 400px; overflow-y: auto; padding-right: 0.5rem; margin-bottom: 2rem;">
+                    <!-- Turns Injected Here via JS -->
+                </div>
+
+                <button class="btn-submit" id="btn-analysis" style="display: block; background: #8b5cf6;"
+                    onclick="startPhase2Analysis()">
+                    🚀 Executar Inteligência Artificial (Fase 2)
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        let selectedFile = null;
+
+        // Hoje
+        document.getElementById('visit_date').valueAsDate = new Date();
+
+        async function init() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) return (window.location.href = 'login.html');
+            document.getElementById('user-email').textContent = session.user.email;
+        }
+
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            window.location.href = 'login.html';
+        }
+
+        // --- Eventos de Drag & Drop ---
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file-input');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        });
+
+        fileInput.addEventListener('change', function () {
+            handleFiles(this.files);
+        });
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            const file = files[0];
+
+            if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|m4a|ogg)$/i)) {
+                alert('Por favor, selecione apenas arquivos de áudio válido.');
+                return;
+            }
+
+            if (file.size > 25 * 1024 * 1024) {
+                alert('O arquivo é muito grande (Máximo 25MB).');
+                return;
+            }
+
+            selectedFile = file;
+
+            // UI
+            document.getElementById('file-name').textContent = file.name;
+            document.getElementById('file-size').textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+            document.getElementById('file-info').style.display = 'flex';
+            document.getElementById('btn-submit').style.display = 'block';
+            dropzone.style.display = 'none';
+        }
+
+        // UI Helper: Renderiza visualmente o balão de chat baseado no role (VENDEDOR/CLIENTE)
+        function renderTurns(parsedData) {
+            document.getElementById('parser-visualizer').style.display = 'block';
+
+            document.getElementById('vp-method').textContent = `Heurística: ${parsedData.parsing_method.toUpperCase()}`;
+            document.getElementById('vp-confidence').textContent = `Confiança: ${(parsedData.confidence_score * 100).toFixed(0)}%`;
+            document.getElementById('vp-review').textContent = parsedData.manual_review ? 'Revisão Humana Exigida: SIM ⚠️' : 'Revisão Humana Exigida: NÃO ✅';
+
+            const container = document.getElementById('turns-container');
+            container.innerHTML = '';
+
+            parsedData.turns.forEach(turn => {
+                const isVendor = turn.role === 'VENDEDOR';
+                const turnDiv = document.createElement('div');
+                turnDiv.style.display = 'flex';
+                turnDiv.style.flexDirection = 'column';
+                turnDiv.style.alignItems = isVendor ? 'flex-start' : 'flex-end';
+
+                const roleBadge = document.createElement('span');
+                roleBadge.textContent = turn.role;
+                roleBadge.style.fontSize = '0.7rem';
+                roleBadge.style.fontWeight = 'bold';
+                roleBadge.style.color = isVendor ? '#60a5fa' : '#a78bfa';
+                roleBadge.style.marginBottom = '0.3rem';
+
+                const bubble = document.createElement('div');
+                bubble.textContent = turn.text;
+                bubble.style.maxWidth = '85%';
+                bubble.style.padding = '0.75rem 1rem';
+                bubble.style.borderRadius = '0.75rem';
+                bubble.style.fontSize = '0.9rem';
+                bubble.style.lineHeight = '1.4';
+
+                if (isVendor) {
+                    bubble.style.background = 'rgba(59, 130, 246, 0.15)';
+                    bubble.style.border = '1px solid rgba(59, 130, 246, 0.3)';
+                    bubble.style.borderBottomLeftRadius = '0';
+                    bubble.style.color = '#e2e8f0';
+                } else {
+                    bubble.style.background = 'rgba(167, 139, 250, 0.15)';
+                    bubble.style.border = '1px solid rgba(167, 139, 250, 0.3)';
+                    bubble.style.borderBottomRightRadius = '0';
+                    bubble.style.color = '#e2e8f0';
+                }
+
+                turnDiv.appendChild(roleBadge);
+                turnDiv.appendChild(bubble);
+                container.appendChild(turnDiv);
+            });
+        }
+
+        function appendLogStep(id, text) {
+            const container = document.getElementById('realtime-steps');
+            const step = document.createElement('div');
+            step.className = 'step active';
+            step.id = id;
+            step.innerHTML = `> ${text}`;
+            container.appendChild(step);
+        }
+
+        function markLogStepDone(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.className = 'step done';
+                el.innerHTML = el.innerHTML + " ✓";
+            }
+        }
+
+        async function startUpload() {
+            if (!selectedFile) return;
+
+            const store = document.getElementById('store_name').value || 'Unidade Padrão';
+            const vendor = document.getElementById('vendor_name').value || 'Desconhecido';
+            const visit = document.getElementById('visit_date').value;
+            const targetModel = document.getElementById('transcription_model').value; // whisper, gemini, local
+
+            // UI Changes
+            document.getElementById('btn-submit').style.display = 'none';
+            document.getElementById('metadata-form').style.opacity = '0.5';
+            document.getElementById('metadata-form').style.pointerEvents = 'none';
+            document.getElementById('processing-state').style.display = 'block';
+            document.getElementById('realtime-steps').innerHTML = '';
+
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            const token = session.access_token;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('store_name', store);
+            formData.append('vendor_name', vendor);
+            formData.append('visit_date', visit);
+            formData.append('transcription_model', targetModel);
+
+            try {
+                // Ao invés do POST tradicional lento, enviamos ao backend e ele nos devolve um job_id imediatamente
+                appendLogStep('step-1', 'Fazendo Upload do arquivo de áudio (Seguro)...');
+
+                const submitRes = await fetch(`${API_BASE}/api/transcribe/async`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+
+                if (!submitRes.ok) throw new Error('Erro ao despachar áudio.');
+                const { job_id } = await submitRes.json();
+
+                markLogStepDone('step-1');
+                appendLogStep('step-2', `Conectando ao tracker Real-time (Job #${job_id})...`);
+
+                // Inicia o Polling de progresso real do backend (com recursão segura e timeout maior)
+                const pollStatus = async () => {
+                    try {
+                        const statusRes = await fetch(`${API_BASE}/api/transcribe/status/${job_id}`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+
+                        if (!statusRes.ok) {
+                            throw new Error(`Erro do servidor: ${statusRes.status}`);
+                        }
+
+                        const statusData = await statusRes.json();
+
+                        // Atualizando a UI do frontend
+                        if (statusData.logs) {
+                            document.getElementById('realtime-steps').innerHTML = '';
+                            statusData.logs.forEach((logItem, idx) => {
+                                appendLogStep(`log-${idx}`, logItem.message);
+                                if (logItem.done) markLogStepDone(`log-${idx}`);
+                            });
+                        }
+
+                        if (statusData.status === 'completed') {
+                            document.getElementById('processing-status-text').style.color = '#4ade80';
+                            document.getElementById('processing-status-text').textContent = "Transcrição e Parsing concluídos!";
+                            window.currentAudioFileId = statusData.audio_file_id; // Guarda ID do banco para a Fase 2
+                            document.querySelector('.loader-spinner').style.borderColor = "rgba(74, 222, 128, 0.3)";
+                            document.querySelector('.loader-spinner').style.borderTopColor = "#4ade80";
+                            document.querySelector('.loader-spinner').style.animation = "none";
+
+                            renderTurns(statusData.parsed_data);
+                            return; // Encerra o polling
+                        } else if (statusData.status === 'failed') {
+                            throw new Error(statusData.error || "Falha processual no backend");
+                        }
+
+                        // Se não terminou e não falhou, agenda próxima checagem
+                        setTimeout(pollStatus, 3000); // 3 segundos para não espamar o servidor
+
+                    } catch (err) {
+                        alert(`Polling interrompido: ${err.message}. Atualize a página se necessário.`);
+                        document.getElementById('processing-status-text').textContent = "Erro de conexão com o servidor.";
+                        document.getElementById('processing-status-text').style.color = "#ef4444";
+                        document.querySelector('.loader-spinner').style.display = "none";
+                    }
+                };
+
+                // Inicia a checagem
+                setTimeout(pollStatus, 3000);
+
+            } catch (error) {
+                alert(`FALHA: ${error.message}`);
+                window.location.reload();
+            }
+        }
+
+        async function startPhase2Analysis() {
+            const btn = document.getElementById('btn-analysis');
+            btn.textContent = "Processando os 7 Agentes LLM... Aguarde (Isso levará cerca de 1 minuto)";
+            btn.disabled = true;
+            btn.style.background = "#4c1d95";
+
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            const token = session.access_token;
+            // O audio_file_id global precisaria vir do polling. Como o js é simples, vamos hackear pegando do HTML se necessário,
+            // ou armazenar da resposta do backend.
+            if (!window.currentAudioFileId) {
+                alert("Ops, não encontrei o ID do áudio em memória. Refaça o upload.");
+                btn.textContent = "🚀 Executar Inteligência Artificial (Fase 2)";
+                btn.disabled = false;
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/analysis/${window.currentAudioFileId}`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (res.ok) {
+                    alert("A Análise (Fase 2) foi enfileirada no backend com sucesso! As 6 tabelas serão populadas assim que os Agentes finalizarem no Background.");
+                    btn.textContent = "Análise Pronta ✅ (Ver Banco de Dados)";
+                    btn.style.background = "#10b981";
+                } else {
+                    throw new Error("Falha ao invocar rota de análise.");
+                }
+            } catch (e) {
+                alert(e.message);
+                btn.textContent = "Falha. Tentar Novamente";
+                btn.disabled = false;
+                btn.style.background = "#ef4444";
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

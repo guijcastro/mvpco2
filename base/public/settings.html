@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Audio Analyst - Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+
+    <nav class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+        <div class="font-bold text-xl text-gray-800">AI Analyst</div>
+                                <div class="space-x-4 flex items-center">
+            <a href="dashboard.html" class="text-blue-600 font-semibold">Meus Áudios</a>
+            <a href="relatorio.html" class="text-green-600 hover:text-green-800 font-semibold">Custos</a>
+            <a href="relatorio_dinamico.html" class="text-purple-600 hover:text-purple-800 font-semibold">Relatórios</a>
+            <a href="logs.html" class="text-indigo-600 font-semibold hover:text-indigo-800">Logs de Chat</a>
+            <a href="settings.html" class="text-gray-600 hover:text-blue-600">Configurações</a>
+            <button onclick="logout()" class="text-red-500 hover:text-red-700">Sair</button>
+        </div>
+        </div>
+    </nav>
+
+    <div class="max-w-2xl mx-auto mt-10 p-6">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">Configuração da API</h1>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <p class="text-sm text-gray-500 mb-4">
+                Suas chaves de API são armazenadas com segurança no Supabase (Criptografadas).
+                Usamos uma chave de criptografia do lado do cliente derivada do seu ID de usuário exclusivo para
+                garantir que apenas você possa descriptografá-las.
+            </p>
+
+            <form id="api-form" class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 text-sm font-semibold mb-1">Chave da API OpenAI</label>
+                    <input type="password" id="openai_key" placeholder="sk-..."
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 text-sm font-semibold mb-1">Chave da API Gemini</label>
+                    <input type="password" id="gemini_key" placeholder="AIza..."
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 text-sm font-semibold mb-1">Chave da API Anthropic
+                        (Claude)</label>
+                    <input type="password" id="anthropic_key" placeholder="sk-ant-..."
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 text-sm font-semibold mb-1">Chave da API xAI (Grok)</label>
+                    <input type="password" id="xai_key" placeholder="xai-..."
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none">
+                </div>
+
+                <div class="flex items-center justify-between pt-4">
+                    <span id="status-msg" class="text-sm text-green-600 font-medium hidden">Salvo com sucesso!</span>
+                    <button type="submit"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition">
+                        Salvar Chaves
+                    </button>
+                </div>
+            </form>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mt-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Tabela de Custos (US$)</h2>
+            <p class="text-sm text-gray-500 mb-6">
+                Defina o custo cobrado pelas IAs a cada 1 milhão de tokens. Esses valores são usados no Dashboard para
+                estimar o gasto financeiro das interações.
+            </p>
+
+            <form id="pricing-form" class="space-y-6">
+                <div id="pricing-container" class="space-y-4">
+                    <!-- Dynamic Rows Injected Here -->
+                    <div class="text-sm text-gray-500 text-center py-4"><i data-lucide="loader"
+                            class="mx-auto animate-spin"></i> Carregando...</div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <span id="pricing-status-msg" class="text-sm text-green-600 font-medium hidden">Preços
+                        atualizados!</span>
+                    <button type="submit"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition flex items-center gap-2">
+                        <i data-lucide="save" class="w-4 h-4"></i> Salvar Tabela
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script>
+        const supabaseUrl = window.SUPABASE_URL || localStorage.getItem('SUPABASE_URL');
+        const supabaseKey = window.SUPABASE_KEY || localStorage.getItem('SUPABASE_KEY');
+
+        if (!supabaseUrl || !supabaseKey) {
+            window.location.href = 'login.html';
+        }
+
+        const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            window.location.href = 'login.html';
+        }
+
+        async function checkAuth() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) window.location.href = 'login.html';
+            return session.user;
+        }
+
+        const form = document.getElementById('api-form');
+        const statusMsg = document.getElementById('status-msg');
+
+        // Encryption using Web Crypto API (AES-GCM)
+        // Derive key from user ID (in production, use a proper key derivation function)
+        async function getEncryptionKey(userId) {
+            const encoder = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(userId + 'AI-AUDIO-ANALYST-SECRET-2026'), // Salt with app secret
+                { name: 'PBKDF2' },
+                false,
+                ['deriveKey']
+            );
+
+            return await crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: encoder.encode('ai-audio-analyst-salt'),
+                    iterations: 100000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        }
+
+        async function encryptText(text, userId) {
+            if (!text) return '';
+
+            const key = await getEncryptionKey(userId);
+            const encoder = new TextEncoder();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                encoder.encode(text)
+            );
+
+            // Combine IV + encrypted data and encode as base64
+            const combined = new Uint8Array(iv.length + encrypted.byteLength);
+            combined.set(iv);
+            combined.set(new Uint8Array(encrypted), iv.length);
+
+            return btoa(String.fromCharCode(...combined));
+        }
+
+        async function decryptText(encryptedBase64, userId) {
+            if (!encryptedBase64) return '';
+
+            try {
+                const key = await getEncryptionKey(userId);
+                const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+
+                const iv = combined.slice(0, 12);
+                const encrypted = combined.slice(12);
+
+                const decrypted = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv: iv },
+                    key,
+                    encrypted
+                );
+
+                return new TextDecoder().decode(decrypted);
+            } catch (e) {
+                console.error('Decryption failed:', e);
+                return ''; // Return empty if decryption fails
+            }
+        }
+
+        async function saveKeys(userId, openai, gemini, anthropic, xai) {
+            // Encrypt keys before saving
+            const encryptedOpenAI = await encryptText(openai, userId);
+            const encryptedGemini = await encryptText(gemini, userId);
+            const encryptedAnthropic = await encryptText(anthropic, userId);
+            const encryptedXAI = await encryptText(xai, userId);
+
+            const { data, error } = await supabaseClient
+                .from('user_settings')
+                .upsert({
+                    user_id: userId,
+                    openai_key: encryptedOpenAI,
+                    gemini_key: encryptedGemini,
+                    anthropic_key: encryptedAnthropic,
+                    xai_key: encryptedXAI
+                }, {
+                    onConflict: 'user_id'
+                })
+                .select();
+
+            if (error) {
+                console.error('Erro detalhado:', error);
+                alert('Erro ao salvar chaves: ' + error.message);
+            } else {
+                console.log('âœ… Chaves criptografadas e salvas com sucesso!');
+                statusMsg.classList.remove('hidden');
+                setTimeout(() => statusMsg.classList.add('hidden'), 3000);
+            }
+        }
+
+        async function loadKeys(userId) {
+            const { data, error } = await supabaseClient
+                .from('user_settings')
+                .select('*')
+                .eq('user_id', userId)
+                .single();
+
+            if (data) {
+                // Decrypt keys before displaying
+                const decryptedOpenAI = await decryptText(data.openai_key, userId);
+                const decryptedGemini = await decryptText(data.gemini_key, userId);
+                const decryptedAnthropic = await decryptText(data.anthropic_key, userId);
+                const decryptedXAI = await decryptText(data.xai_key, userId);
+
+                document.getElementById('openai_key').value = decryptedOpenAI;
+                document.getElementById('gemini_key').value = decryptedGemini;
+                if (document.getElementById('anthropic_key')) document.getElementById('anthropic_key').value = decryptedAnthropic;
+                if (document.getElementById('xai_key')) document.getElementById('xai_key').value = decryptedXAI;
+            }
+        }
+
+        // Init
+        checkAuth().then(user => {
+            console.log('âœ… Usuário autenticado:', user);
+            loadKeys(user.id);
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                console.log('ðŸ“ Formulário submetido!');
+
+                const openaiKey = document.getElementById('openai_key').value;
+                const geminiKey = document.getElementById('gemini_key').value;
+                const anthropicKey = document.getElementById('anthropic_key') ? document.getElementById('anthropic_key').value : '';
+                const xaiKey = document.getElementById('xai_key') ? document.getElementById('xai_key').value : '';
+
+                console.log('Chaves a salvar:', {
+                    user_id: user.id,
+                    openai_key: openaiKey ? 'presente (oculta)' : 'vazia',
+                    gemini_key: geminiKey ? 'presente (oculta)' : 'vazia',
+                    anthropic_key: anthropicKey ? 'presente (oculta)' : 'vazia',
+                    xai_key: xaiKey ? 'presente (oculta)' : 'vazia'
+                });
+
+                await saveKeys(user.id, openaiKey, geminiKey, anthropicKey, xaiKey);
+            });
+
+            // --- Pricing Logic ---
+            const pricingForm = document.getElementById('pricing-form');
+            const pricingContainer = document.getElementById('pricing-container');
+            const pricingStatusMsg = document.getElementById('pricing-status-msg');
+
+            async function loadPricing() {
+                try {
+                    const response = await fetch(`${window.API_BASE || ''}/.netlify/functions/pricing`);
+                    if (response.ok) {
+                        const pricingData = await response.json();
+                        renderPricingForm(pricingData);
+                    } else {
+                        throw new Error('Failed to load pricing');
+                    }
+                } catch (e) {
+                    console.error("Error loading pricing", e);
+                    pricingContainer.innerHTML = '<div class="text-sm text-red-500">Erro ao carregar a tabela. O servidor local está rodando?</div>';
+                }
+            }
+
+            function renderPricingForm(data) {
+                pricingContainer.innerHTML = '';
+
+                // Header Row
+                const header = document.createElement('div');
+                header.className = "grid grid-cols-5 gap-4 px-2 font-medium text-xs text-gray-500 uppercase tracking-wider mb-2 hidden md:grid";
+                header.innerHTML = `
+                    <div class="col-span-2">Modelo de IA</div>
+                    <div>Custo Input (1M)</div>
+                    <div>Custo Output (1M)</div>
+                    <div></div>
+                `;
+                pricingContainer.appendChild(header);
+
+                for (const [model, costs] of Object.entries(data)) {
+                    if (model === 'server') continue; // We will render it separately at the bottom
+
+                    const row = document.createElement('div');
+                    row.className = "grid grid-cols-1 md:grid-cols-5 gap-4 items-center bg-gray-50 p-3 rounded-lg border border-gray-100";
+                    row.innerHTML = `
+                        <div class="col-span-2 font-mono text-sm font-semibold text-gray-700">${model}</div>
+                        <div>
+                            <label class="md:hidden text-xs text-gray-500 block mb-1">${model.includes('whisper') ? 'Custo p/ Min' : 'Input (1M)'}</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 text-sm">$</span>
+                                <input type="number" step="0.000001" data-model="${model}" data-type="input" value="${costs.input}" required
+                                class="w-full pl-7 pr-3 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 outline-none bg-white">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="md:hidden text-xs text-gray-500 block mb-1">Output (1M)</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 text-sm">$</span>
+                                <input type="number" step="0.000001" data-model="${model}" data-type="output" value="${costs.output}" ${model.includes('whisper') ? 'disabled opacity-50' : 'required'}
+                                class="w-full pl-7 pr-3 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 outline-none bg-white">
+                            </div>
+                        </div>
+                    `;
+                    pricingContainer.appendChild(row);
+                }
+
+                // Render Server Cost Row
+                if (data.server) {
+                    const serverRow = document.createElement('div');
+                    serverRow.className = "grid grid-cols-1 md:grid-cols-5 gap-4 items-center bg-blue-50/50 p-3 rounded-lg border border-blue-100 mt-6 shadow-inner md:col-start-1 md:col-span-5";
+                    serverRow.innerHTML = `
+                        <div class="col-span-2 font-mono text-sm font-semibold text-gray-800 flex items-center gap-2"><i data-lucide="server" class="w-4 h-4 text-blue-600"></i> Uso do Servidor</div>
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">Custo Fixo p/ Req ($)</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 text-sm">$</span>
+                                <input type="number" step="0.0001" data-model="server" data-type="cost_per_request" value="${data.server.cost_per_request !== undefined ? data.server.cost_per_request : 0.002}" required
+                                class="w-full pl-7 pr-3 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 outline-none bg-white">
+                            </div>
+                        </div>
+                        <div class="hidden md:block col-span-2 text-xs text-gray-500 italic px-2">
+                            Custo base que será cobrado no processamento / infraestrutura a cada interação com a IA.
+                        </div>
+                    `;
+                    pricingContainer.appendChild(serverRow);
+                    lucide.createIcons(); // refresh icons
+                }
+            }
+
+            pricingForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const inputs = pricingContainer.querySelectorAll('input');
+                const newPricing = {};
+
+                inputs.forEach(input => {
+                    const model = input.getAttribute('data-model');
+                    const type = input.getAttribute('data-type');
+                    const val = parseFloat(input.value);
+
+                    if (!newPricing[model]) {
+                        if (model === 'server') newPricing[model] = { cost_per_request: 0 };
+                        else newPricing[model] = { input: 0, output: 0 };
+                    }
+                    newPricing[model][type] = val;
+                });
+
+                try {
+                    const response = await fetch(`${window.API_BASE || ''}/.netlify/functions/pricing`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newPricing)
+                    });
+
+                    if (response.ok) {
+                        pricingStatusMsg.classList.remove('hidden');
+                        setTimeout(() => pricingStatusMsg.classList.add('hidden'), 3000);
+                    } else {
+                        throw new Error("Failed to save pricing");
+                    }
+                } catch (e) {
+                    alert('Erro ao salvar tabela de custos.');
+                    console.error("Save pricing error", e);
+                }
+            });
+
+            loadPricing();
+
+        }).catch(err => {
+            console.error('âŒ Erro na autenticação:', err);
+        });
+
+        // Initialize any static icons early
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+
+    </script>
+</body>
+
+</html>

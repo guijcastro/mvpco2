@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MVPCO — Dashboard</title>
+    <meta name="description" content="Dashboard de análise de atendimentos — Cliente Oculto Varejo Ótico.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        /* ── Navbar ── */
+        nav {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .nav-brand span {
+            color: #3b82f6;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .nav-link {
+            padding: 0.4rem 0.75rem;
+            border-radius: 0.4rem;
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        #user-email {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .btn-logout {
+            padding: 0.35rem 0.75rem;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 0.4rem;
+            color: #f87171;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        /* ── Layout ── */
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .page-header {
+            margin-bottom: 2rem;
+        }
+
+        .page-header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .page-header p {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+        }
+
+        /* ── KPI Cards ── */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .kpi-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            transition: border-color 0.2s;
+        }
+
+        .kpi-card:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+
+        .kpi-label {
+            font-size: 0.75rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .kpi-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #fff;
+            margin-top: 0.5rem;
+        }
+
+        .kpi-sub {
+            font-size: 0.75rem;
+            color: #475569;
+            margin-top: 0.25rem;
+        }
+
+        /* ── Quick Actions ── */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .action-card {
+            background: rgba(59, 130, 246, 0.07);
+            border: 1px solid rgba(59, 130, 246, 0.15);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: all 0.2s;
+        }
+
+        .action-card:hover {
+            background: rgba(59, 130, 246, 0.12);
+            border-color: rgba(59, 130, 246, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .action-icon {
+            width: 2.5rem;
+            height: 2.5rem;
+            background: rgba(59, 130, 246, 0.2);
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .action-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .action-sub {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.1rem;
+        }
+
+        /* ── Recent Analyses ── */
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 1rem;
+        }
+
+        .table-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        th {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-size: 0.75rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 0.8rem 1rem;
+            font-size: 0.875rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .badge-green {
+            background: rgba(34, 197, 94, 0.15);
+            color: #86efac;
+        }
+
+        .badge-blue {
+            background: rgba(59, 130, 246, 0.15);
+            color: #93c5fd;
+        }
+
+        .badge-gray {
+            background: rgba(100, 116, 139, 0.15);
+            color: #94a3b8;
+        }
+
+        #recent-body td {
+            color: #94a3b8;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #475569;
+        }
+
+        .empty-state p {
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <div class="nav-brand">MVP<span>CO</span></div>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link active">Dashboard</a>
+            <a href="upload.html" class="nav-link">Upload</a>
+            <a href="relatorio.html" class="nav-link">Relatórios</a>
+            <a href="settings.html" class="nav-link">Configurações</a>
+        </div>
+        <div class="nav-right">
+            <span id="user-email"></span>
+            <button class="btn-logout" onclick="logout()">Sair</button>
+        </div>
+    </nav>
+
+    <main>
+        <div class="page-header">
+            <h1>Dashboard</h1>
+            <p>Visão geral de atendimentos analisados</p>
+        </div>
+
+        <!-- KPIs -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-label">Total de Análises</div>
+                <div class="kpi-value" id="kpi-total">—</div>
+                <div class="kpi-sub">atendimentos analisados</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Score Médio</div>
+                <div class="kpi-value" id="kpi-score">—</div>
+                <div class="kpi-sub">checklist Zeiss</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Custo Total IA</div>
+                <div class="kpi-value" id="kpi-cost">—</div>
+                <div class="kpi-sub">em USD</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Áudios Aguardando</div>
+                <div class="kpi-value" id="kpi-pending">—</div>
+                <div class="kpi-sub">sem análise</div>
+            </div>
+        </div>
+
+        <!-- Ações rápidas -->
+        <div class="actions-grid">
+            <a href="upload.html" class="action-card">
+                <div class="action-icon">🎙️</div>
+                <div>
+                    <div class="action-title">Enviar Áudio</div>
+                    <div class="action-sub">Upload e transcrição</div>
+                </div>
+            </a>
+            <a href="relatorio.html" class="action-card">
+                <div class="action-icon">📊</div>
+                <div>
+                    <div class="action-title">Ver Relatórios</div>
+                    <div class="action-sub">Comparativos e histórico</div>
+                </div>
+            </a>
+            <a href="settings.html" class="action-card">
+                <div class="action-icon">⚙️</div>
+                <div>
+                    <div class="action-title">Configurações</div>
+                    <div class="action-sub">Modelos e chaves de API</div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Análises recentes -->
+        <div class="section-title">Últimas Análises</div>
+        <div class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Loja</th>
+                        <th>Vendedor</th>
+                        <th>Score</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="recent-body">
+                    <tr>
+                        <td colspan="5">
+                            <div class="empty-state">⏳<p>Carregando...</p>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        async function init() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) return (window.location.href = 'login.html');
+
+            document.getElementById('user-email').textContent = session.user.email;
+            await loadDashboard(session.user.id);
+        }
+
+        async function loadDashboard(userId) {
+            // Total de áudios
+            const { count: totalAudio } = await supabaseClient
+                .from('audio_files').select('*', { count: 'exact', head: true })
+                .eq('user_id', userId);
+
+            // Total de análises
+            const { count: totalAnalysis } = await supabaseClient
+                .from('conversation_analysis').select('*', { count: 'exact', head: true })
+                .eq('user_id', userId);
+
+            document.getElementById('kpi-total').textContent = totalAnalysis ?? 0;
+            document.getElementById('kpi-pending').textContent = Math.max(0, (totalAudio ?? 0) - (totalAnalysis ?? 0));
+
+            // Custo total de telemetria
+            const { data: telemetry } = await supabaseClient
+                .from('usage_telemetry').select('cost_usd').eq('user_id', userId);
+
+            const totalCost = (telemetry || []).reduce((s, r) => s + parseFloat(r.cost_usd || 0), 0);
+            document.getElementById('kpi-cost').textContent = `$${totalCost.toFixed(4)}`;
+
+            // Score médio a partir da análise (extraído de analysis_data)
+            document.getElementById('kpi-score').textContent = '—';  // Fase 2 popula isso
+
+            // Análises recentes
+            const { data: recent } = await supabaseClient
+                .from('audio_files')
+                .select('id, store_name, vendor_name, visit_date, created_at, manual_review')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(5);
+
+            const tbody = document.getElementById('recent-body');
+            if (!recent || recent.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">📭 <p>Nenhum atendimento registrado ainda. Comece enviando um áudio.</p></div></td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = recent.map(r => `
+        <tr>
+          <td>${new Date(r.visit_date || r.created_at).toLocaleDateString('pt-BR')}</td>
+          <td>${r.store_name || '—'}</td>
+          <td>${r.vendor_name || '—'}</td>
+          <td>—</td>
+          <td><span class="badge ${r.manual_review ? 'badge-gray' : 'badge-blue'}">${r.manual_review ? 'Revisão' : 'Aguardando'}</span></td>
+        </tr>
+      `).join('');
+        }
+
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            window.location.href = 'login.html';
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

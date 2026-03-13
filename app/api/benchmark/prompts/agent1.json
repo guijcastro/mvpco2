@@ -1,0 +1,31 @@
+{
+    "agent_id": "agent1",
+    "description": "Avalia itens do checklist Zeiss — determinístico e LLM",
+    "system": "Você é um avaliador especialista em qualidade de atendimento em óticas. Analise a transcrição de um atendimento de venda e avalie cada item do checklist fornecido. Responda APENAS em JSON válido, sem texto adicional.\n\nREGRAS:\n- Para cada item, determine o veredicto: SIM (comportamento observado), NAO (comportamento ausente) ou INCONCLUSIVO (dados insuficientes)\n- confidence: 0.0 (muito incerto) a 1.0 (certeza absoluta)\n- evidence: trecho EXATO da transcrição que suporta o veredicto (máx 100 caracteres). Se NAO, explique o que estava ausente.\n- Não alucine evidências. Se não encontrar, use INCONCLUSIVO.\n- turn_id: índice do turno da evidência (null se não aplicável)",
+    "user": "TRANSCRIÇÃO DO ATENDIMENTO (atendimento_exemplo_01):\n\nVendedor: Boa tarde! Seja bem-vindo! Pode entrar.\nCliente: Boa tarde, obrigado.\nVendedor: Posso ajudá-lo? Está procurando algo específico?\nCliente: Sim, quero fazer um óculos novo. Minha receita já tem um tempo.\nVendedor: Claro! Me deixa dar uma olhada nos seus óculos atuais primeiro. Vou passar no lensômetro para ver sua graduação. [pausa] Aqui, deixa eu limpar também, tenho um lenço adequado.\nCliente: Ah, que bom.\nVendedor: Você já ouviu falar na Zeiss? São as lentes que trabalhamos aqui.\nCliente: Conheço de nome, mas não sei muito.\nVendedor: Ótimo! A Zeiss é uma empresa alemã com mais de 170 anos, referência mundial em óptica. Qual é a sua profissão?\nCliente: Sou engenheiro, passo muito tempo no computador.\nVendedor: Perfeito! E dirige bastante?\nCliente: Sim, todo dia.\nVendedor: Então tenho algo perfeito para você. Mas primeiro, vamos fazer uma medição completa com nosso iTerminal. É uma tecnologia digital que garante precisão máxima.\nCliente: Nunca fiz assim, é diferente do normal?\nVendedor: Muito mais preciso! [medição] Pronto. Agora, para quem dirige muito e usa computador, a Zeiss tem a lente DriveSafe — reduz o cansaço ao volante e melhora a visão noturna. E com o filtro antirrreflexo DuraVision e o PhotoFusion que escurece no sol...\nCliente: Quanto custa?\nVendedor: Esse pacote completo fica em R$ 2.800. Mas posso mostrar as opções.\nCliente: É bastante. Vou pensar.\nVendedor: Claro, sem pressão. Posso te dar meu contato? Assim se tiver dúvida, pode me chamar pelo WhatsApp. Seu telefone?\nCliente: Sim, é 11 99999-0000.\nVendedor: Anotado! Vou te mandar as informações.",
+    "expected_schema": {
+        "checklist": {
+            "type": "list",
+            "required": true,
+            "description": "Lista de avaliações de cada item do checklist"
+        }
+    },
+    "expected_output_example": {
+        "checklist": [
+            {
+                "item_key": "cumprimentou_cliente",
+                "verdict": "SIM",
+                "confidence": 0.98,
+                "evidence": "Boa tarde! Seja bem-vindo! Pode entrar.",
+                "turn_id": 0
+            },
+            {
+                "item_key": "pegou_oculos_lensometro",
+                "verdict": "SIM",
+                "confidence": 0.95,
+                "evidence": "Vou passar no lensômetro para ver sua graduação.",
+                "turn_id": 4
+            }
+        ]
+    }
+}

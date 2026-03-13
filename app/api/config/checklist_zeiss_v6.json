@@ -1,0 +1,351 @@
+[
+    {
+        "item_key": "cumprimentou_cliente",
+        "item_label": "Cumprimentou o cliente ao chegar",
+        "keywords": [
+            "boa tarde",
+            "bom dia",
+            "boa noite",
+            "bem-vindo",
+            "olá",
+            "seja bem-vindo",
+            "bem vindo",
+            "tudo bem",
+            "como posso ajudar"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_3",
+        "weight": 5,
+        "requires_llm": false,
+        "rationale": "Keywords diretas com alta confiança nas primeiras 4 falas do vendedor"
+    },
+    {
+        "item_key": "perguntou_conhece_zeiss",
+        "item_label": "Perguntou se o cliente conhece a Zeiss",
+        "keywords": [
+            "conhece zeiss",
+            "já ouviu falar da zeiss",
+            "conhece a zeiss",
+            "sabe o que é zeiss",
+            "já usou zeiss",
+            "tem zeiss"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_10",
+        "weight": 8,
+        "requires_llm": false,
+        "rationale": "Pergunta de diagnóstico de conhecimento de marca — deve aparecer cedo"
+    },
+    {
+        "item_key": "pegou_oculos_lensometro",
+        "item_label": "Pegou os óculos do cliente e passou no lensômetro",
+        "keywords": [
+            "lensômetro",
+            "lensometro",
+            "medir sua lente",
+            "analisar seu óculos",
+            "ver sua graduação atual",
+            "conferir sua lente"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_15",
+        "weight": 10,
+        "requires_llm": false,
+        "rationale": "Ação física — mencionada verbalmente quando o vendedor informa o cliente"
+    },
+    {
+        "item_key": "limpou_lens_wipes",
+        "item_label": "Limpou as lentes com lenço apropriado (lens wipes)",
+        "keywords": [
+            "paninho",
+            "lenço",
+            "limpar seus óculos",
+            "vou limpar",
+            "limpando",
+            "lens wipe",
+            "limpei",
+            "está limpo"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_15",
+        "weight": 5,
+        "requires_llm": false,
+        "rationale": "Ação de cuidado — geralmente verbalizada ao realizar"
+    },
+    {
+        "item_key": "usou_ultrassonico",
+        "item_label": "Utilizou o banho ultrassônico",
+        "keywords": [
+            "ultrassônico",
+            "ultrasonico",
+            "limpeza ultrassônica",
+            "banho ultrassônico",
+            "máquina de limpeza",
+            "passar no ultrassônico"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_20",
+        "weight": 5,
+        "requires_llm": false,
+        "rationale": "Menção ao equipamento específico"
+    },
+    {
+        "item_key": "perguntou_profissao",
+        "item_label": "Perguntou a profissão do cliente",
+        "keywords": [
+            "qual sua profissão",
+            "o que você faz",
+            "trabalha com quê",
+            "em que área",
+            "sua área",
+            "sua atividade profissional",
+            "trabalha como"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_20",
+        "weight": 8,
+        "requires_llm": false,
+        "rationale": "Qualificação do cliente — determina necessidades de uso das lentes"
+    },
+    {
+        "item_key": "perguntou_eletronicos",
+        "item_label": "Perguntou sobre uso de eletrônicos / telas",
+        "keywords": [
+            "computador",
+            "celular",
+            "eletrônico",
+            "tela",
+            "tablet",
+            "monitor",
+            "quanto tempo na tela",
+            "usa computador",
+            "notebook"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_25",
+        "weight": 8,
+        "requires_llm": false,
+        "rationale": "Qualificação para recomendar proteção digital (BluGuard)"
+    },
+    {
+        "item_key": "perguntou_esportes",
+        "item_label": "Perguntou sobre atividades físicas/esportes",
+        "keywords": [
+            "pratica esporte",
+            "faz academia",
+            "corre",
+            "esporte",
+            "atividade física",
+            "malha",
+            "joga",
+            "bicicleta",
+            "natação"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_25",
+        "weight": 6,
+        "requires_llm": false,
+        "rationale": "Qualificação para recomendar DriveSafe ou lentes mais resistentes"
+    },
+    {
+        "item_key": "perguntou_dirige",
+        "item_label": "Perguntou se o cliente dirige",
+        "keywords": [
+            "dirige",
+            "tem carro",
+            "usa carro",
+            "dirige à noite",
+            "visão noturna",
+            "dificuldade ao dirigir",
+            "fica cansado dirigindo"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_25",
+        "weight": 8,
+        "requires_llm": false,
+        "rationale": "Gatilho para recomendar DriveSafe"
+    },
+    {
+        "item_key": "perguntou_sensibilidade_luz",
+        "item_label": "Perguntou sobre sensibilidade à luz / sol",
+        "keywords": [
+            "sensível à luz",
+            "incômodo com sol",
+            "fica com os olhos irritados",
+            "fotofobia",
+            "claridade",
+            "claridade incomoda",
+            "sensível ao sol"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_25",
+        "weight": 6,
+        "requires_llm": false,
+        "rationale": "Gatilho para recomendar PhotoFusion / proteção UV"
+    },
+    {
+        "item_key": "mencionou_iterminal_visufit",
+        "item_label": "Mencionou o iTerminal ou Visufit para medição",
+        "keywords": [
+            "iTerminal",
+            "i terminal",
+            "Visufit",
+            "visufit",
+            "medição digital",
+            "equipamento de medição",
+            "medir seu rosto",
+            "centralização"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_5_40",
+        "weight": 10,
+        "requires_llm": false,
+        "rationale": "Diferencial tecnológico Zeiss — deve ser mencionado durante o processo de medição"
+    },
+    {
+        "item_key": "solicitou_telefone_email",
+        "item_label": "Solicitou telefone ou e-mail para contato",
+        "keywords": [
+            "seu telefone",
+            "seu celular",
+            "seu e-mail",
+            "email",
+            "contato",
+            "posso te mandar mensagem",
+            "whatsapp",
+            "te ligar"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_20_99",
+        "weight": 8,
+        "requires_llm": false,
+        "rationale": "Captação de contato — essencial para follow-up pós-venda"
+    },
+    {
+        "item_key": "ofertou_photofusion_antivirus",
+        "item_label": "Ofertou PhotoFusion e antirreflexo",
+        "keywords": [
+            "PhotoFusion",
+            "fotossensível",
+            "transitions",
+            "antirreflexo",
+            "anti-reflexo",
+            "reflexo",
+            "claridade",
+            "proteção UV"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_5_50",
+        "weight": 10,
+        "requires_llm": false,
+        "rationale": "Produto premium mandatório na metodologia Zeiss"
+    },
+    {
+        "item_key": "mencionou_zeiss_clareza",
+        "item_label": "Mencionou diferenciais de nitidez/clareza da Zeiss",
+        "keywords": [
+            "clareza",
+            "nitidez",
+            "visão mais nítida",
+            "ver mais claro",
+            "qualidade Zeiss",
+            "diferencial zeiss",
+            "tecnologia zeiss",
+            "alemã",
+            "precisão"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_0_50",
+        "weight": 8,
+        "requires_llm": false,
+        "rationale": "Branding e percepção de valor — palavras-chave de qualidade"
+    },
+    {
+        "item_key": "usou_app_visuconsult",
+        "item_label": "Utilizou o aplicativo VisuConsult",
+        "keywords": [
+            "VisuConsult",
+            "visuconsult",
+            "aplicativo",
+            "app da zeiss",
+            "simulação",
+            "ver como vai ficar",
+            "mostrar no app"
+        ],
+        "role": "VENDEDOR",
+        "window": "turns_5_50",
+        "weight": 6,
+        "requires_llm": false,
+        "rationale": "Uso de tecnologia de vendas Zeiss"
+    },
+    {
+        "item_key": "explicou_zeiss_com_clareza",
+        "item_label": "Explicou os benefícios da Zeiss com clareza e convicção",
+        "keywords": [],
+        "role": "VENDEDOR",
+        "window": "full",
+        "weight": 12,
+        "requires_llm": true,
+        "rationale": "Avaliação qualitativa — exige LLM para analisar coerência e profundidade da explicação"
+    },
+    {
+        "item_key": "realizou_medicao_com_equipamento",
+        "item_label": "Realizou medição com equipamento digital (não manual)",
+        "keywords": [],
+        "role": "VENDEDOR",
+        "window": "full",
+        "weight": 10,
+        "requires_llm": true,
+        "rationale": "Inferência complexa: LLM verifica se medição foi com equipamento Zeiss ou régua manual"
+    },
+    {
+        "item_key": "ofertou_lente_maior_valor_primeiro",
+        "item_label": "Ofertou a lente de maior valor primeiro (up-sell proativo)",
+        "keywords": [],
+        "role": "VENDEDOR",
+        "window": "full",
+        "weight": 12,
+        "requires_llm": true,
+        "rationale": "Sequência de ofertas — LLM analisa a ordem em que produtos foram apresentados"
+    },
+    {
+        "item_key": "demonstrou_interesse_genuino",
+        "item_label": "Demonstrou interesse genuíno nas necessidades do cliente",
+        "keywords": [],
+        "role": "VENDEDOR",
+        "window": "full",
+        "weight": 10,
+        "requires_llm": true,
+        "rationale": "Empatia e escuta ativa — avaliação subjetiva que exige análise contextual do LLM"
+    },
+    {
+        "item_key": "utilizou_recurso_visual",
+        "item_label": "Utilizou recurso visual para demonstrar o produto",
+        "keywords": [],
+        "role": "VENDEDOR",
+        "window": "full",
+        "weight": 8,
+        "requires_llm": true,
+        "rationale": "LLM verifica menção a catálogo, amostra de lente, tablet ou material físico de demonstração"
+    },
+    {
+        "item_key": "consultou_tabela_precos",
+        "item_label": "Consultou tabela de preços e apresentou orçamento formal",
+        "keywords": [],
+        "role": "VENDEDOR",
+        "window": "full",
+        "weight": 8,
+        "requires_llm": true,
+        "rationale": "LLM verifica se preço foi dado de forma estruturada ou a valor chutado"
+    },
+    {
+        "item_key": "contato_pos_visita_7_dias",
+        "item_label": "Comprometeu-se com follow-up em até 7 dias",
+        "keywords": [],
+        "role": "VENDEDOR",
+        "window": "turns_last_5",
+        "weight": 10,
+        "requires_llm": true,
+        "rationale": "LLM verifica se vendedor verbalizou compromisso de retorno nos últimos turnos"
+    }
+]

@@ -1,0 +1,47 @@
+{
+    "agent_id": "agent2",
+    "description": "Detecta objeções de compra e avalia eficácia do vendedor",
+    "system": "Você é especialista em análise de vendas consultivas. Analise a transcrição e identifique todas as objeções de compra levantadas pelo cliente, classificando cada uma e avaliando como o vendedor respondeu.\n\nTIPOS DE OBJEÇÃO (use exatamente estes valores):\n- PRECO_ALTO: preço acima do esperado\n- PRECO_SEM_CONTEXTO: hesitação vaga / 'vou pensar'\n- PRECISA_CONSULTAR_TERCEIRO: precisa de aprovação de outra pessoa\n- JA_TEM_PRODUTO_SIMILAR: já possui produto equivalente recente\n- COMPARACAO_CONCORRENTE: menciona concorrente mais barato\n- QUALIDADE_QUESTIONADA: dúvida sobre durabilidade ou eficácia\n- URGENCIA_BAIXA: não está com pressa para decidir\n- CONDICAO_PAGAMENTO: questiona parcelamento ou forma de pagamento\n- DESCONFIANCA_MARCA: ceticismo sobre a Zeiss\n\nEFICÁCIA do vendedor:\n- CONTORNOU: vendedor abordou e neutralizou a objeção\n- NAO_CONTORNOU: vendedor ignorou ou falhou em responder\n- PARCIAL: vendedor respondeu mas não totalmente\n\nResponda APENAS em JSON válido.",
+    "user": "TRANSCRIÇÃO DO ATENDIMENTO (atendimento_exemplo_01):\n\nVendedor: Boa tarde! Seja bem-vindo!\nCliente: Boa tarde.\nVendedor: Posso ajudar?\nCliente: Sim, vim pesquisar óculos. Mas só estou vendo os preços por enquanto.\nVendedor: Claro! Me deixa te mostrar o que temos. Trabalhamos com Zeiss, a melhor lente do mercado.\nCliente: Zeiss? Nunca ouvi falar.\nVendedor: É uma marca alemã, mais de 170 anos de tradição. Olha, esse modelo aqui com a lente progressiva e DuraVision fica R$ 2.800.\nCliente: Nossa, é bem caro. Na outra ótica vi por R$ 1.500.\nVendedor: Mas a qualidade é diferente. A Zeiss tem garantia e clareza superior.\nCliente: Será que dura? Minha última lente riscou rápido.\nVendedor: Essa tem blindagem DuraVision. Mas entendo a preocupação.\nCliente: Vou pensar. Preciso falar com minha esposa antes.\nVendedor: Claro, sem problema. Aqui está meu cartão.",
+    "expected_schema": {
+        "objections": {
+            "type": "list",
+            "required": true,
+            "description": "Lista de objeções detectadas"
+        },
+        "objection_summary": {
+            "type": "string",
+            "required": true,
+            "description": "Análise geral do padrão de objeções"
+        }
+    },
+    "expected_output_example": {
+        "objections": [
+            {
+                "objection_type": "URGENCIA_BAIXA",
+                "objection_text": "vim pesquisar óculos. Mas só estou vendo os preços por enquanto",
+                "turn_id": 3,
+                "vendor_response_text": null,
+                "efficacy": "NAO_CONTORNOU",
+                "phase": "abertura"
+            },
+            {
+                "objection_type": "DESCONFIANCA_MARCA",
+                "objection_text": "Zeiss? Nunca ouvi falar.",
+                "turn_id": 5,
+                "vendor_response_text": "É uma marca alemã, mais de 170 anos de tradição.",
+                "efficacy": "PARCIAL",
+                "phase": "apresentacao"
+            },
+            {
+                "objection_type": "PRECO_ALTO",
+                "objection_text": "Nossa, é bem caro. Na outra ótica vi por R$ 1.500.",
+                "turn_id": 7,
+                "vendor_response_text": "Mas a qualidade é diferente.",
+                "efficacy": "PARCIAL",
+                "phase": "proposta"
+            }
+        ],
+        "objection_summary": "Cliente demonstrou 4 objeções distintas. Vendedor não preparou o terreno de valor antes de apresentar o preço, tornando o choque maior."
+    }
+}

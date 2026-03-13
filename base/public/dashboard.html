@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI Audio Analyst - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+
+    <nav class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm">
+        <div class="font-bold text-xl text-gray-800 flex items-center gap-2">
+            <i data-lucide="waves" class="text-blue-600"></i> AI Analyst
+        </div>
+        <div class="space-x-4 flex items-center">
+            <a href="dashboard.html" class="text-blue-600 font-semibold">Meus Áudios</a>
+            <a href="relatorio.html" class="text-green-600 hover:text-green-800 font-semibold">Custos</a>
+            <a href="relatorio_dinamico.html" class="text-purple-600 hover:text-purple-800 font-semibold">Relatórios</a>
+            <a href="logs.html" class="text-indigo-600 font-semibold hover:text-indigo-800">Logs de Chat</a>
+            <a href="settings.html" class="text-gray-600 hover:text-blue-600">Configurações</a>
+            <button onclick="logout()" class="text-red-500 hover:text-red-700">Sair</button>
+        </div>
+        </div>
+    </nav>
+
+    <div class="max-w-5xl mx-auto mt-8 px-6">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">Sua Biblioteca de Áudio</h1>
+            <div class="flex items-center gap-4 w-full md:w-auto">
+                <div class="flex-1 md:flex-none flex items-center gap-2">
+                    <label for="transcription-model"
+                        class="text-xs font-semibold text-gray-500 uppercase tracking-widest hidden md:block">Motor:</label>
+                    <select id="transcription-model"
+                        class="w-full md:w-auto border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-blue-500 outline-none bg-white font-medium text-gray-700">
+                        <option value="openai|whisper-1">OpenAI Whisper (Recomendado)</option>
+                        <option value="gemini|gemini-2.5-pro">Gemini 2.5 Pro</option>
+                        <option value="gemini|gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
+                    </select>
+                </div>
+                <a href="upload.html"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition shadow-md whitespace-nowrap">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i> Enviar
+                </a>
+            </div>
+        </div>
+
+        <!-- Audio List -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <table class="w-full text-left">
+                <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
+                    <tr>
+                        <th class="px-6 py-3">Nome do Arquivo</th>
+                        <th class="px-6 py-3">Data</th>
+                        <th class="px-6 py-3">Status</th>
+                        <th class="px-6 py-3 text-right">Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="audio-list" class="divide-y divide-gray-100 text-sm">
+                    <!-- Loaded dynamically -->
+                    <tr>
+                        <td colspan="4" class="px-6 py-8 text-center text-gray-400">Carregando sua biblioteca...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Classification Modal -->
+    <div id="classification-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col m-4">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <i data-lucide="tags" class="w-5 h-5 text-purple-600"></i> Classificação de Áudio
+                </h2>
+                <button onclick="closeClassificationModal()" class="text-gray-500 hover:text-gray-700">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
+                <input type="hidden" id="class-audio-id">
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Motor Analítico</label>
+                    <select id="class-model"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none">
+                        <option value="gemini|gemini-2.5-pro">Gemini 2.5 Pro (Recomendado / Estável)</option>
+                        <option value="gemini|gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
+                        <option value="openai|gpt-4o">OpenAI GPT-4o</option>
+                        <option value="openai|o1">OpenAI o1</option>
+                        <option value="openai|o3">OpenAI o3</option>
+                        <option value="openai|gpt-5.2-chat-latest">OpenAI ChatGPT 5.2</option>
+                        <option value="anthropic|claude-sonnet-4-6">Anthropic Claude Sonnet 4.6</option>
+                        <option value="anthropic|claude-3-5-sonnet-latest">Anthropic Claude 3.5 Sonnet</option>
+                        <option value="xai|grok-3">xAI Grok 3</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Instruções de Classificação</label>
+                    <p class="text-xs text-gray-500 mb-2">Defina os parâmetros que a IA deve procurar na transcrição
+                        para gerar o JSON.</p>
+                    <textarea id="class-prompt" rows="5"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none resize-y"
+                        placeholder="Ex: Avalie o atendimento de 1 a 5, liste os tópicos abordados e identifique se a venda foi concluída (booleano).">Você é um classificador automático. Analise a transcrição e retorne ESTRITAMENTE um arquivo JSON com 3 chaves:
+1. "tema_principal": Resumo em 3 palavras.
+2. "sentimento_cliente": Positivo, Neutro ou Negativo.
+3. "venda_concluida": true ou false.
+Não retorne blocos de markdown ```json, apenas a estrutura crua.</textarea>
+                </div>
+
+                <!-- Result Area (Hidden initially) -->
+                <div id="class-result-area" class="hidden flex-col gap-2 mt-2">
+                    <label class="block text-sm font-semibold text-green-700">Resultado JSON:</label>
+                    <div class="bg-gray-900 rounded-lg p-4 relative group">
+                        <button onclick="copyClassResult()"
+                            class="absolute top-2 right-2 p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 opacity-0 group-hover:opacity-100 transition"
+                            title="Copiar JSON">
+                            <i data-lucide="copy" class="w-4 h-4"></i>
+                        </button>
+                        <pre id="class-result-code"
+                            class="text-green-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap max-h-48"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end gap-3">
+                <button onclick="closeClassificationModal()"
+                    class="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition">Cancelar</button>
+                <button id="class-btn-run" onclick="runClassification()"
+                    class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg flex items-center gap-2 transition">
+                    <i data-lucide="play" class="w-4 h-4"></i> Extrair Classificação
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script>
+        const supabaseUrl = window.SUPABASE_URL || localStorage.getItem('SUPABASE_URL');
+        const supabaseKey = window.SUPABASE_KEY || localStorage.getItem('SUPABASE_KEY');
+        if (!supabaseUrl) window.location.href = 'login.html';
+        const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Encryption Helpers (Copied from settings.html)
+        async function getEncryptionKey(userId) {
+            const encoder = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(userId + 'AI-AUDIO-ANALYST-SECRET-2026'),
+                { name: 'PBKDF2' },
+                false,
+                ['deriveKey']
+            );
+            return await crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: encoder.encode('ai-audio-analyst-salt'),
+                    iterations: 100000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['decrypt']
+            );
+        }
+
+        async function decryptText(encryptedBase64, userId) {
+            if (!encryptedBase64) return '';
+            try {
+                const key = await getEncryptionKey(userId);
+                // Base64 to ArrayBuffer
+                const binaryString = atob(encryptedBase64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const combined = bytes;
+
+                const iv = combined.slice(0, 12);
+                const encrypted = combined.slice(12);
+
+                const decrypted = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv: iv },
+                    key,
+                    encrypted
+                );
+
+                return new TextDecoder().decode(decrypted);
+            } catch (e) {
+                console.error('Decryption failed:', e);
+                return null;
+            }
+        }
+
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            window.location.href = 'login.html';
+        }
+
+        async function loadAudios() {
+            const { data: { user } } = await supabaseClient.auth.getUser();
+            if (!user) window.location.href = 'login.html';
+
+            // Fetch from audio_files table
+            const { data, error } = await supabaseClient
+                .from('audio_files')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            const list = document.getElementById('audio-list');
+            list.innerHTML = '';
+
+            if (error) {
+                list.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">Erro: ${error.message}</td></tr>`;
+                return;
+            }
+
+            // Deduplicate manual entries (client-side fix for accidental multiple submissions)
+            const uniqueData = [];
+            const seenManualTitles = new Set();
+
+            data.forEach(item => {
+                if (item.storage_path && item.storage_path.startsWith('manual/')) {
+                    // Normalize title for check
+                    const title = item.file_name.trim();
+                    if (!seenManualTitles.has(title)) {
+                        seenManualTitles.add(title);
+                        uniqueData.push(item);
+                    }
+                } else {
+                    uniqueData.push(item);
+                }
+            });
+
+            if (uniqueData.length === 0) {
+                list.innerHTML = `<tr><td colspan="4" class="px-6 py-12 text-center text-gray-400 flex flex-col items-center gap-2">
+                    <i data-lucide="mic-off" class="w-8 h-8 opacity-50"></i>    
+                    Nenhum áudio encontrado. Envie um para começar!
+                </td></tr>`;
+                lucide.createIcons();
+            }
+
+            uniqueData.forEach(file => {
+                const isManual = file.storage_path && file.storage_path.startsWith('manual/');
+
+                let icon = '';
+                let statusBadge = '';
+
+                if (isManual) {
+                    icon = '<i data-lucide="file-text" class="w-4 h-4 text-purple-600"></i>';
+                    statusBadge = '<span class="px-2 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">Transcrição Manual</span>';
+                } else {
+                    icon = '<i data-lucide="file-audio" class="w-4 h-4 text-blue-500"></i>';
+                    const statusColor = file.status === 'processed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700';
+                    const statusExibicao = file.status === 'processed' ? 'Processado' : (file.status === 'uploaded' ? 'Enviado' : file.status);
+                    statusBadge = `<span class="px-2 py-1 rounded-full text-xs font-bold ${statusColor}">${statusExibicao}</span>`;
+                }
+
+                const row = `
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-6 py-4 font-medium text-gray-900 flex items-center gap-2">
+                            ${icon} ${file.file_name}
+                        </td>
+                        <td class="px-6 py-4 text-gray-500">${new Date(file.created_at).toLocaleDateString('pt-BR')}</td>
+                        <td class="px-6 py-4">
+                            ${statusBadge}
+                        </td>
+                        <td class="px-6 py-4 text-right space-x-2">
+                            ${file.status === 'uploaded' && !isManual ?
+                        `<button onclick="transcribe('${file.id}', this)" class="text-blue-600 hover:underline">Transcrever</button>` :
+                        `<button onclick="openClassificationModal('${file.id}')" class="text-purple-600 hover:text-purple-800 font-medium text-sm transition">Classificar</button>
+                         <a href="chat.html?id=${file.id}" class="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-md text-xs font-bold hover:bg-indigo-100 inline-block ml-2">Chat com IA</a>`
+                    }
+                        </td>
+                    </tr>
+                `;
+                list.innerHTML += row;
+            });
+            lucide.createIcons();
+        }
+
+        async function transcribe(fileId, btn) {
+            const { data: { user } } = await supabaseClient.auth.getUser();
+            const { data: file } = await supabaseClient.from('audio_files').select('*').eq('id', fileId).single();
+
+            if (!file) {
+                alert('Arquivo não encontrado');
+                return;
+            }
+
+            const modelSelector = document.getElementById('transcription-model');
+            const modelValue = modelSelector ? modelSelector.value : 'openai|whisper-1';
+            const [provider, modelId] = modelValue.split('|');
+
+            // 1. Get Settings (API Key)
+            const { data: settings } = await supabaseClient.from('user_settings').select('gemini_key, openai_key').eq('user_id', user.id).single();
+
+            let encryptedKey = provider === 'openai' ? settings?.openai_key : settings?.gemini_key;
+
+            if (!settings || !encryptedKey) {
+                alert(`Por favor, configure sua chave da API ${provider === 'openai' ? 'OpenAI' : 'Gemini'} em Configurações primeiro.`);
+                window.location.href = 'settings.html';
+                return;
+            }
+
+            // 1.5 Decrypt API Key
+            const decryptedKey = await decryptText(encryptedKey, user.id);
+            if (!decryptedKey) {
+                alert(`Erro ao descriptografar chave API da ${provider === 'openai' ? 'OpenAI' : 'Gemini'}. Tente salvar novamente em Configurações.`);
+                return;
+            }
+
+            // 2. Get Signed URL
+            const { data: { signedUrl } } = await supabaseClient.storage.from('audios').createSignedUrl(file.storage_path, 3600);
+
+            // 3. Call Netlify Function (or Local Bun)
+            btn.textContent = 'Transcrevendo...';
+            btn.disabled = true;
+
+            try {
+                // In local dev with Bun we might need full URL if not proxied, but relative usually works with Netlify Dev
+                const response = await fetch(`${window.API_BASE || ''}/.netlify/functions/transcribe`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        audioUrl: signedUrl,
+                        apiKey: decryptedKey,
+                        provider: provider,
+                        modelId: modelId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // 4. Save Transcript to DB
+                    const { error } = await supabaseClient.from('transcriptions').insert({
+                        audio_id: fileId,
+                        text: result.text,
+                        user_id: user.id,
+                        model: modelId
+                    });
+
+                    if (error) throw new Error(error.message);
+
+                    // 5. Insert Telemetry
+                    if (result.telemetry) {
+                        try {
+                            await supabaseClient.from('usage_telemetry').insert({
+                                user_id: user.id,
+                                operation_type: 'transcription',
+                                provider: provider,
+                                model: modelId,
+                                prompt_tokens: result.telemetry.promptTokens,
+                                completion_tokens: result.telemetry.completionTokens,
+                                total_tokens: result.telemetry.promptTokens + result.telemetry.completionTokens,
+                                estimated_cost_usd: result.telemetry.estimatedCostUsd,
+                                latency_ms: result.telemetry.latency,
+                                server_processing_ms: result.telemetry.serverProcessingMs || 0,
+                                server_cost_usd: result.telemetry.serverCostUsd || 0
+                            });
+                        } catch (tError) {
+                            console.error("Telemetry Logging Error:", tError);
+                        }
+                    }
+
+                    // Update Status
+                    await supabaseClient.from('audio_files').update({ status: 'processed' }).eq('id', fileId);
+
+                    alert('Transcrição completa!');
+                    loadAudios(); // Refresh list
+                } else {
+                    throw new Error(result.error || 'Falha na transcrição');
+                }
+            } catch (err) {
+                alert('Erro: ' + err.message);
+                btn.textContent = 'Transcrever';
+                btn.disabled = false;
+            }
+        }
+
+        // --- Classification Modal Logic ---
+        function openClassificationModal(audioId) {
+            document.getElementById('class-audio-id').value = audioId;
+            document.getElementById('class-result-area').classList.add('hidden');
+            document.getElementById('class-result-code').textContent = '';
+            document.getElementById('classification-modal').classList.remove('hidden');
+            document.getElementById('class-btn-run').disabled = false;
+            document.getElementById('class-btn-run').innerHTML = '<i data-lucide="play" class="w-4 h-4"></i> Extrair Classificação';
+            document.getElementById('class-btn-run').onclick = runClassification;
+            lucide.createIcons();
+        }
+
+        function closeClassificationModal() {
+            document.getElementById('classification-modal').classList.add('hidden');
+        }
+
+        async function copyClassResult() {
+            const code = document.getElementById('class-result-code').textContent;
+            await navigator.clipboard.writeText(code);
+            alert("JSON copiado para a área de transferência!");
+        }
+
+        async function runClassification() {
+            const audioId = document.getElementById('class-audio-id').value;
+            const modelConfig = document.getElementById('class-model').value;
+            const systemPrompt = document.getElementById('class-prompt').value;
+            const btn = document.getElementById('class-btn-run');
+
+            if (!systemPrompt.trim()) { alert("Por favor, preencha as instruções de classificação."); return; }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Analisando...';
+            lucide.createIcons();
+
+            const { data: { user } } = await supabaseClient.auth.getUser();
+            const [provider, modelId] = modelConfig.split('|');
+
+            // Get Key
+            const { data: settings } = await supabaseClient.from('user_settings').select('gemini_key, openai_key, anthropic_key, xai_key').eq('user_id', user.id).single();
+
+            let encryptedKey = null;
+            let providerName = '';
+
+            if (provider === 'openai') { encryptedKey = settings?.openai_key; providerName = 'OpenAI'; }
+            else if (provider === 'gemini') { encryptedKey = settings?.gemini_key; providerName = 'Gemini'; }
+            else if (provider === 'anthropic') { encryptedKey = settings?.anthropic_key; providerName = 'Anthropic'; }
+            else if (provider === 'xai') { encryptedKey = settings?.xai_key; providerName = 'xAI'; }
+
+            if (!settings || !encryptedKey) {
+                alert(`Configure sua chave da ${providerName} em Configurações primeiro.`);
+                closeClassificationModal();
+                return;
+            }
+
+            const decryptedKey = await decryptText(encryptedKey, user.id);
+            if (!decryptedKey) { alert(`Erro ao descriptografar chave.`); closeClassificationModal(); return; }
+
+            // Get Transcription Text
+            const { data: transcript } = await supabaseClient.from('transcriptions').select('text').eq('audio_id', audioId).single();
+            if (!transcript || !transcript.text) {
+                alert("Nenhuma transcrição encontrada para este áudio. Transcreva-o primeiro.");
+                closeClassificationModal();
+                return;
+            }
+
+            try {
+                const response = await fetch(`${window.API_BASE || ''}/.netlify/functions/classify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        transcription: transcript.text,
+                        systemPrompt: systemPrompt,
+                        apiKey: decryptedKey,
+                        provider: provider,
+                        modelId: modelId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // Display Result
+                    document.getElementById('class-result-area').classList.remove('hidden');
+                    document.getElementById('class-result-area').classList.add('flex');
+                    document.getElementById('class-result-code').textContent = JSON.stringify(result.classificationData, null, 2);
+
+                    // Save to DB
+                    const { error: dbError } = await supabaseClient.from('audio_classifications').insert({
+                        audio_id: audioId,
+                        user_id: user.id,
+                        classification_data: result.classificationData,
+                        model_used: modelId
+                    });
+
+                    if (dbError) {
+                        console.error("Warning: Could not save classification to DB.", dbError);
+                        // Make failure non-blocking for display but warn developer
+                        // User might not have run the classification_setup.sql yet
+                        alert("Classificação gerada, mas erro ao salvar no banco. Você já rodou o script de setup SQL?");
+                    }
+
+                    // Save Telemetry
+                    if (result.telemetry) {
+                        await supabaseClient.from('usage_telemetry').insert({
+                            user_id: user.id,
+                            operation_type: 'classification', // NEW TYPE
+                            provider: provider,
+                            model: modelId,
+                            prompt_tokens: result.telemetry.promptTokens,
+                            completion_tokens: result.telemetry.completionTokens,
+                            total_tokens: result.telemetry.promptTokens + result.telemetry.completionTokens,
+                            estimated_cost_usd: result.telemetry.estimatedCostUsd,
+                            latency_ms: result.telemetry.latency,
+                            server_processing_ms: result.telemetry.serverProcessingMs || 0,
+                            server_cost_usd: result.telemetry.serverCostUsd || 0
+                        });
+                    }
+
+                    btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Concluído (Fechar)';
+                    btn.disabled = false;
+                    // Mudar o comportamento do botão para fechar o modal
+                    btn.onclick = closeClassificationModal;
+
+                } else {
+                    throw new Error(result.error || 'Falha na classificação');
+                }
+            } catch (err) {
+                alert('Erro: ' + err.message);
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="play" class="w-4 h-4"></i> Extrair Classificação';
+            }
+            lucide.createIcons();
+        }
+
+        loadAudios();
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

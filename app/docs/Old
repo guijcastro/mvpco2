@@ -1,0 +1,118 @@
+# Entrega: Fase A — Benchmark de IAs
+
+**Data de conclusão:** 09/03/2026  
+**Executado por:** Antigravity  
+**Aprovado por:** _aguardando_  
+**Status:** 🟡 AGUARDANDO APROVAÇÃO DO USUÁRIO
+
+---
+
+## 1. Resumo Executivo
+
+Toda a infraestrutura de benchmark foi criada. O sistema testa os 4 providers (OpenAI, Anthropic, Google, xAI) com 8 modelos variantes nos 7 agentes do pipeline, mede latência/custo/schema e gera uma tabela de decisão ranqueada. A execução real do benchmark **depende das chaves de API** que só o usuário possui — a IA gerou o código e os prompts, o usuário executa os testes.
+
+---
+
+## 2. Atividades Realizadas
+
+| # | Atividade | Resultado | Obs |
+|---|-----------|-----------|-----|
+| 1 | `api/benchmark/runner.py` — async multi-provider com litellm | ✅ Concluída | 8 modelos × 7 agentes × N repetições |
+| 2 | `api/benchmark/report.py` — tabela comparativa CLI | ✅ Concluída | Ranqueia por schema_pass_rate → custo |
+| 3 | `api/benchmark/prompts/agent1.json` — Checklist Zeiss | ✅ Concluída | Transcrição real + schema + expected output |
+| 4 | `api/benchmark/prompts/agent2.json` — Objeções | ✅ Concluída | 9 tipos de objeção + 3 níveis de eficácia |
+| 5 | `api/benchmark/prompts/agent3.json` — Intenção de compra (CoT) | ✅ Concluída | Chain-of-Thought obrigatório no output |
+| 6 | `api/benchmark/prompts/agent4.json` — Sentimento por fase | ✅ Concluída | 7 fases + sentiment arc + critical moments |
+| 7 | `api/benchmark/prompts/agent5.json` — Perfil psicológico | ✅ Concluída | 4 arquétipos + recomendações de comunicação |
+| 8 | `api/benchmark/prompts/agent6.json` — Oportunidades perdidas | ✅ Concluída | 4 tipos + valor financeiro estimado |
+| 9 | `api/benchmark/prompts/agent7.json` — Síntese executiva | ✅ Concluída | Recebe output dos agentes 1-6 consolidado |
+| 10 | `supabase/05_api_keys.sql` — tabela `user_api_keys` criptografada | ✅ Concluída | **Executar manualmente** no Supabase |
+| 11 | `api/utils/encryption.py` — Fernet (AES-128-CBC + HMAC) | ✅ Concluída | Usa `SERVER_ENCRYPTION_KEY` do `.env` |
+| 12 | `api/routers/settings.py` — GET/POST/DELETE/test de chaves | ✅ Concluída | Retorna apenas hint (4 chars) ao frontend |
+| 13 | `public/settings.html` — UI de gerenciamento de chaves por provedor | ✅ Concluída | Botões Salvar / Testar / Remover |
+| 14 | `api/benchmark/runner_old.py` preservado (Regra 9) | ✅ Concluída | Cópia da versão antiga (usava .env) |
+| 15 | `api/main_old.py` preservado (Regra 9) | ✅ Concluída | Cópia antes de incluir settings router |
+| 16 | `runner.py` atualizado — busca chaves do Supabase via JWT | ✅ Concluída | Requer `--token <JWT>` como argumento |
+| 17 | `api/requirements.txt` — adicionado `cryptography>=42.0.0` | ✅ Concluída | |
+
+---
+
+## 3. Decisões Tomadas
+
+| Decisão | Justificativa | Aprovada? |
+|---------|--------------|-----------|
+| 8 modelos testados (2 por provider) | Comparar variantes premium vs. econômicas por agente | 🟡 Pendente |
+| `temperature=0.0` no benchmark | Resultados determinísticos para comparação justa | Implícita |
+| Schema validado por `_validate_schema()` | Evitar contar "resposta com JSON inválido" como sucesso | Implícita |
+| **Chaves de API via frontend** — não no `.env` | Pedido explícito do usuário (09/03/2026) | ✅ Aprovado |
+| Fernet (criptografia simétrica) no servidor | AES-128-CBC + HMAC: rápido, seguro, sem dependência de KMS externo | Implícita |
+
+---
+
+## 4. Pendências — O que o USUÁRIO precisa fazer
+
+> [!IMPORTANT]
+> Antes de rodar o benchmark, configure as chaves em `Configurações → Chaves de API` no frontend.
+> Obtenha seu JWT em: `supabase.auth.getSession().then(s => console.log(s.data.session.access_token))`
+
+```bash
+# 1. Gerar SERVER_ENCRYPTION_KEY (uma única vez, salvar no .env)
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# 2. Instalar dependências
+pip install -r api/requirements.txt
+
+# 3. Subir FastAPI
+uvicorn main:app --reload --port 8001
+
+# 4. Configurar chaves em: http://localhost:8888/settings.html
+
+# 5. Obter JWT no console do browser após login:
+#    supabase.auth.getSession().then(s => console.log(s.data.session.access_token))
+
+# 6. Rodar benchmark (WSL, pasta api/)
+python -m benchmark.runner --token SEU_JWT_AQUI --agent agent7 --reps 2  # teste rápido
+python -m benchmark.runner --token SEU_JWT_AQUI --all --reps 3            # completo
+python -m benchmark.report --best
+```
+
+---
+
+## 5. Solicitações e Feedback do Usuário (Fase A)
+
+### Aprovações
+- ✅ **09/03/2026** — Aprovado avançar para Fase A após Fase 1 aprovada
+- ✅ **09/03/2026** — Chaves de API via frontend (não em `.env`) — aprovado
+
+### Rejeições
+- ❌ **09/03/2026** — Chaves de API no `.env` rejeitadas pelo usuário — substituir por UI no frontend + criptografia Supabase
+
+---
+
+## 6. Checklist de Entregáveis
+
+- [ ] `supabase/05_api_keys.sql` executado manualmente no Supabase
+- [ ] `SERVER_ENCRYPTION_KEY` gerada e salva no `.env`
+- [ ] `pip install -r api/requirements.txt` sem erros
+- [ ] FastAPI iniciado (`uvicorn main:app --reload --port 8001`)
+- [ ] Chaves configuradas em `http://localhost:8888/settings.html`
+- [ ] Botão "Testar" funcional para cada provedor
+- [ ] JWT obtido no console do browser
+- [ ] `python -m benchmark.runner --token JWT --agent agent7 --reps 2` executa sem erro
+- [ ] `python -m benchmark.runner --token JWT --all --reps 3` completa (~30 min)
+- [ ] `python -m benchmark.report --best` mostra tabela de decisão
+- [ ] Modelos escolhidos registrados em `CONTEXTO.md` (seção "Decisões")
+
+---
+
+## 7. Aprovação Final
+
+**[ ] Aprovado para avançar para a Fase B (Parsing: Testes e Validação)**
+
+Comentários do usuário:
+> _[aguardando]_
+
+---
+
+*Arquivo gerado em: 09/03/2026 — Antigravity*  
+*Próxima fase: [docs/fase_parsing.md](fase_parsing.md)*

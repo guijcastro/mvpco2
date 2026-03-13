@@ -1,0 +1,151 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste de Banco de Dados</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+        }
+
+        button {
+            padding: 10px;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>ðŸ” Teste de PermissÃµes do Supabase</h1>
+
+    <button onclick="testAuth()">1. Testar AutenticaÃ§Ã£o</button>
+    <button onclick="testRead()">2. Testar Leitura</button>
+    <button onclick="testInsert()">3. Testar Insert</button>
+    <button onclick="testUpdate()">4. Testar Update</button>
+
+    <pre id="output">Clique nos botÃµes acima para testar...</pre>
+
+    <script src="js/config.js"></script>
+    <script>
+        const supabaseUrl = window.SUPABASE_URL || localStorage.getItem('SUPABASE_URL');
+        const supabaseKey = window.SUPABASE_KEY || localStorage.getItem('SUPABASE_KEY');
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        const output = document.getElementById('output');
+
+        function log(msg) {
+            output.textContent += '\n' + msg;
+            console.log(msg);
+        }
+
+        async function testAuth() {
+            output.textContent = 'ðŸ” Testando autenticaÃ§Ã£o...\n';
+            const { data: { user }, error } = await supabase.auth.getUser();
+            if (error) {
+                log('âŒ Erro: ' + error.message);
+            } else if (user) {
+                log('âœ… UsuÃ¡rio autenticado: ' + user.email);
+                log('   User ID: ' + user.id);
+            } else {
+                log('âŒ Nenhum usuÃ¡rio logado');
+            }
+        }
+
+        async function testRead() {
+            output.textContent = 'ðŸ“– Testando leitura de user_settings...\n';
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                log('âŒ FaÃ§a login primeiro!');
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('user_id', user.id);
+
+            if (error) {
+                log('âŒ Erro ao ler: ' + error.message);
+                log('   CÃ³digo: ' + error.code);
+                log('   Detalhes: ' + JSON.stringify(error.details));
+            } else {
+                log('âœ… Leitura OK!');
+                log('   Dados: ' + JSON.stringify(data, null, 2));
+            }
+        }
+
+        async function testInsert() {
+            output.textContent = 'âž• Testando INSERT em user_settings...\n';
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                log('âŒ FaÃ§a login primeiro!');
+                return;
+            }
+
+            const testData = {
+                user_id: user.id,
+                openai_key: 'test_openai_key_' + Date.now(),
+                gemini_key: 'test_gemini_key_' + Date.now()
+            };
+
+            log('Tentando inserir: ' + JSON.stringify(testData, null, 2));
+
+            const { data, error } = await supabase
+                .from('user_settings')
+                .insert(testData)
+                .select();
+
+            if (error) {
+                log('âŒ Erro ao inserir: ' + error.message);
+                log('   CÃ³digo: ' + error.code);
+                log('   Detalhes: ' + JSON.stringify(error.details));
+                log('   Hint: ' + error.hint);
+            } else {
+                log('âœ… INSERT OK!');
+                log('   Dados inseridos: ' + JSON.stringify(data, null, 2));
+            }
+        }
+
+        async function testUpdate() {
+            output.textContent = 'ðŸ”„ Testando UPDATE em user_settings...\n';
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                log('âŒ FaÃ§a login primeiro!');
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from('user_settings')
+                .upsert({
+                    user_id: user.id,
+                    openai_key: 'updated_openai_' + Date.now(),
+                    gemini_key: 'updated_gemini_' + Date.now()
+                }, {
+                    onConflict: 'user_id'
+                })
+                .select();
+
+            if (error) {
+                log('âŒ Erro ao fazer upsert: ' + error.message);
+                log('   CÃ³digo: ' + error.code);
+                log('   Detalhes: ' + JSON.stringify(error.details));
+                log('   Hint: ' + error.hint);
+            } else {
+                log('âœ… UPSERT OK!');
+                log('   Dados: ' + JSON.stringify(data, null, 2));
+            }
+        }
+    </script>
+</body>
+
+</html>

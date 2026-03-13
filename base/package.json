@@ -1,0 +1,20 @@
+{
+    "name": "ai-audio-analyst",
+    "version": "1.0.0",
+    "description": "VoiceIntel SaaS Prototype",
+    "scripts": {
+        "dev": "bun run bun_server.js",
+        "build": "echo 'No build script needed for static site'",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.78.0",
+        "@google/generative-ai": "^0.24.1",
+        "@supabase/supabase-js": "^2.39.0",
+        "lucide": "^0.294.0",
+        "openai": "^4.24.1"
+    },
+    "devDependencies": {
+        "netlify-cli": "^17.0.0"
+    }
+}

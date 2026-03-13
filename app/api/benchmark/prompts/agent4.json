@@ -1,0 +1,98 @@
+{
+    "agent_id": "agent4",
+    "description": "Sentimento e fase da conversa turno a turno",
+    "system": "Você é especialista em análise de sentimento e dinâmica de conversas de venda. Analise a transcrição e segmente a conversa em fases, avaliando o sentimento de cada fase.\n\nFASES da conversa de varejo ótico:\n- abertura: primeiros contatos, cumprimento, quebra-gelo\n- diagnostico: perguntas sobre necessidades, estilo de vida, profissão\n- apresentacao: demonstração de produtos, explicação de benefícios\n- proposta: apresentação de preços e condições\n- negociacao: tratamento de objeções, ajuste de oferta\n- fechamento: tentativa de fechar a venda\n- pos_venda: captura de contato, agendamento de follow-up\n\nSENTIMENTOS:\n- positivo, neutro, negativo, duvida, entusiasmo, resistencia, tedio\n\nResponda APENAS em JSON válido.",
+    "user": "TRANSCRIÇÃO DO ATENDIMENTO (atendimento_exemplo_01):\n\n[0] Vendedor: Boa tarde! Seja bem-vindo!\n[1] Cliente: Boa tarde. [tom neutro]\n[2] Vendedor: O que está procurando hoje?\n[3] Cliente: Preciso de progressiva. Já estou sem enxergar de perto.\n[4] Vendedor: Entendo! Qual é a sua profissão?\n[5] Cliente: Advogado. Leio muito.\n[6] Vendedor: Perfeito! Então a lente Office da Zeiss é ideal — otimizada para distâncias intermediárias e leitura prolongada.\n[7] Cliente: Interessante. E quanto custa?\n[8] Vendedor: Esse modelo com DuraVision fica R$ 1.800.\n[9] Cliente: Hmm. É o meu limite. Tem desconto à vista?\n[10] Vendedor: Posso fazer R$ 1.700 à vista. Vai resolver seu problema e ainda terá garantia de 2 anos.\n[11] Cliente: Tudo bem, vou fechar.\n[12] Vendedor: Ótimo! Me passa seus dados para o cadastro.",
+    "expected_schema": {
+        "phases": {
+            "type": "list",
+            "required": true,
+            "description": "Lista de fases identificadas na conversa"
+        },
+        "overall_sentiment_arc": {
+            "type": "string",
+            "required": true,
+            "description": "Descrição da evolução geral do sentimento"
+        },
+        "critical_moments": {
+            "type": "list",
+            "required": true,
+            "description": "Momentos de virada positivos ou negativos"
+        }
+    },
+    "expected_output_example": {
+        "phases": [
+            {
+                "phase": "abertura",
+                "turns": [
+                    0,
+                    1,
+                    2
+                ],
+                "sentiment": "neutro",
+                "intensity": 0.3,
+                "notes": "Cliente responde brevemente, sem engajamento inicial"
+            },
+            {
+                "phase": "diagnostico",
+                "turns": [
+                    3,
+                    4,
+                    5
+                ],
+                "sentiment": "neutro",
+                "intensity": 0.4,
+                "notes": "Cliente identifica necessidade clara (leitura de advogado)"
+            },
+            {
+                "phase": "apresentacao",
+                "turns": [
+                    6,
+                    7
+                ],
+                "sentiment": "positivo",
+                "intensity": 0.6,
+                "notes": "Cliente demonstra interesse ('Interessante')"
+            },
+            {
+                "phase": "proposta",
+                "turns": [
+                    8,
+                    9
+                ],
+                "sentiment": "duvida",
+                "intensity": 0.5,
+                "notes": "Preço no limite — cliente negocia desconto"
+            },
+            {
+                "phase": "fechamento",
+                "turns": [
+                    10,
+                    11,
+                    12
+                ],
+                "sentiment": "positivo",
+                "intensity": 0.9,
+                "notes": "Fechamento com desconto à vista e garantia"
+            }
+        ],
+        "overall_sentiment_arc": "Conversa iniciou neutra, subiu para interesse na apresentação, leve hesitação na proposta e fechamento positivo após desconto pontual.",
+        "critical_moments": [
+            {
+                "turn": 6,
+                "type": "VIRADA_POSITIVA",
+                "description": "Vendedor conectou produto certo à profissão"
+            },
+            {
+                "turn": 9,
+                "type": "TENSAO",
+                "description": "Preço no limite do cliente — risco de perda"
+            },
+            {
+                "turn": 10,
+                "type": "VIRADA_POSITIVA",
+                "description": "Desconto + garantia fechou a venda"
+            }
+        ]
+    }
+}

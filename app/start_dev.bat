@@ -1,0 +1,3 @@
+@echo off
+echo Acionando o ambiente puro do WSL do Linux...
+wsl bash /mnt/c/Users/User/.gemini/antigravity/scratch/MVPCO/app/start_dev.sh

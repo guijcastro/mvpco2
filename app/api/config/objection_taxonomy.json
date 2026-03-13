@@ -1,0 +1,133 @@
+[
+    {
+        "type": "PRECO_ALTO",
+        "label": "Preço alto / Valor acima do esperado",
+        "definition": "Cliente expressa que o preço está acima do esperado ou do seu orçamento",
+        "examples": [
+            "tá caro",
+            "não tenho esse dinheiro",
+            "é muito dinheiro",
+            "achei que era mais barato",
+            "nossa, caro",
+            "não esperava esse preço",
+            "está fora do meu orçamento",
+            "muito caro",
+            "caro demais"
+        ]
+    },
+    {
+        "type": "PRECO_SEM_CONTEXTO",
+        "label": "Hesitação genérica / 'Vou pensar'",
+        "definition": "Hesitação vaga sem objeção explícita — cliente não dá razão clara",
+        "examples": [
+            "deixa eu pensar",
+            "vou pensar",
+            "preciso ver",
+            "depois eu decido",
+            "não é agora",
+            "vou ver",
+            "preciso considerar",
+            "pode me dar o orçamento?"
+        ]
+    },
+    {
+        "type": "PRECISA_CONSULTAR_TERCEIRO",
+        "label": "Precisa consultar cônjuge / sócio / familiar",
+        "definition": "Cliente precisa da aprovação ou opinião de outra pessoa antes de decidir",
+        "examples": [
+            "vou falar com meu marido",
+            "preciso consultar minha esposa",
+            "quero mostrar para minha filha",
+            "meu marido precisa aprovar",
+            "vou ver com minha mulher",
+            "minha mãe decide",
+            "vou perguntar pro meu sócio"
+        ]
+    },
+    {
+        "type": "JA_TEM_PRODUTO_SIMILAR",
+        "label": "Já possui produto similar recente",
+        "definition": "Cliente tem óculos recente ou produto equivalente que satisfaz sua necessidade",
+        "examples": [
+            "acabei de comprar",
+            "tenho um novo",
+            "comprei ano passado",
+            "meu óculos tá bom ainda",
+            "acabei de fazer",
+            "foi feito recentemente",
+            "comprei há pouco tempo"
+        ]
+    },
+    {
+        "type": "COMPARACAO_CONCORRENTE",
+        "label": "Comparação com concorrente mais barato",
+        "definition": "Cliente menciona concorrente (marca ou ótica) com preço ou condição mais favorável",
+        "examples": [
+            "na outra ótica era mais barato",
+            "vi a Essilor por menos",
+            "Varilux custa menos",
+            "fulano (ótica) cobrou menos",
+            "Hoya é mais barato",
+            "na internet é mais barato",
+            "vi na ótica X por menos"
+        ]
+    },
+    {
+        "type": "QUALIDADE_QUESTIONADA",
+        "label": "Dúvida sobre qualidade / durabilidade",
+        "definition": "Cliente questiona durabilidade, procedência ou eficácia da lente ou marca",
+        "examples": [
+            "será que dura?",
+            "não conheço essa marca",
+            "já ouvi dizer que risca fácil",
+            "é de boa qualidade mesmo?",
+            "quanto tempo dura?",
+            "vai riscar?",
+            "minha última lente durou pouco"
+        ]
+    },
+    {
+        "type": "URGENCIA_BAIXA",
+        "label": "Urgência baixa / Só veio pesquisar",
+        "definition": "Cliente não está com pressa para decidir — veio explorar opções",
+        "examples": [
+            "só vim pesquisar",
+            "não estou com pressa",
+            "é para o futuro",
+            "ainda vou ver mais opções",
+            "estou pesquisando preço",
+            "não preciso agora",
+            "vim dar uma olhada"
+        ]
+    },
+    {
+        "type": "CONDICAO_PAGAMENTO",
+        "label": "Questiona condição de pagamento / parcelamento",
+        "definition": "Preço é aceitável, mas cliente tem dúvidas sobre forma de pagamento ou parcelamento",
+        "examples": [
+            "tem parcela?",
+            "aceita cartão?",
+            "pode parcelar em 12x?",
+            "qual a entrada?",
+            "tem desconto à vista?",
+            "aceita débito?",
+            "posso pagar em 2 vezes?",
+            "tem plano?",
+            "meu plano cobre?"
+        ]
+    },
+    {
+        "type": "DESCONFIANCA_MARCA",
+        "label": "Ceticismo sobre a marca Zeiss",
+        "definition": "Cliente não conhece a Zeiss ou questiona sua superioridade em relação a outras marcas",
+        "examples": [
+            "não conheço Zeiss",
+            "nunca ouvi falar",
+            "é melhor que as outras?",
+            "por que Zeiss é melhor?",
+            "conheço Essilor, mas Zeiss não",
+            "é muito diferente da Varilux?",
+            "vale a diferença de preço?"
+        ]
+    }
+]

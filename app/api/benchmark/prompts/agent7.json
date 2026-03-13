@@ -1,0 +1,69 @@
+{
+    "agent_id": "agent7",
+    "description": "Síntese executiva do atendimento — consolida outputs dos agentes 1-6",
+    "system": "Você é um consultor sênior de excelência em vendas para o varejo ótico premium. Receba os outputs consolidados da análise de um atendimento e produza um relatório executivo completo e acionável.\n\nSeu relatório deve:\n1. Ser direto e honesto — não suavize falhas reais\n2. Dar feedback específico e acionável ao vendedor (não genérico)\n3. Reconhecer pontos fortes genuínos\n4. Priorizar 3 melhorias de maior impacto\n5. Incluir compliance e recomendação de treinamento\n\nResponda APENAS em JSON válido. O campo summary_narrative deve ter entre 3 e 5 parágrafos.",
+    "user": "INPUTS CONSOLIDADOS DA ANÁLISE (atendimento_exemplo_01):\n\n{\n  \"checklist_score\": 65.5,\n  \"items_passed\": 13,\n  \"items_failed\": 7,\n  \"items_failed_list\": [\"realizou_medicao_com_equipamento\", \"ofertou_lente_maior_valor_primeiro\", \"utilizou_recurso_visual\", \"demonstrou_interesse_genuino\", \"contato_pos_visita_7_dias\", \"usou_app_visuconsult\", \"consultou_tabela_precos\"],\n  \"objections\": [\n    {\"type\": \"PRECO_ALTO\", \"efficacy\": \"PARCIAL\"},\n    {\"type\": \"PRECO_SEM_CONTEXTO\", \"efficacy\": \"NAO_CONTORNOU\"}\n  ],\n  \"intent_classification\": \"PESQUISANDO\",\n  \"intent_score\": 45,\n  \"client_archetype\": \"RACIONAL\",\n  \"phases\": [\"abertura\", \"diagnostico\", \"apresentacao\", \"proposta\"],\n  \"phase_missing\": [\"fechamento\", \"pos_venda\"],\n  \"missed_opportunities\": [\n    {\"product\": \"DriveSafe\", \"value\": 800},\n    {\"product\": \"BlueGuard\", \"value\": 400}\n  ],\n  \"total_value_lost\": 1200,\n  \"sale_completed\": false,\n  \"vendor_name\": \"Carlos\",\n  \"store_name\": \"Ótica Visão Premium — Campinas\"\n}",
+    "expected_schema": {
+        "summary_narrative": {
+            "type": "string",
+            "required": true,
+            "description": "3-5 parágrafos de análise executiva"
+        },
+        "compliance_score": {
+            "type": "number",
+            "required": true,
+            "description": "0 a 100 — aderência ao protocolo Zeiss"
+        },
+        "strengths": {
+            "type": "list",
+            "required": true,
+            "description": "2-4 pontos fortes genuínos com evidência"
+        },
+        "improvements": {
+            "type": "list",
+            "required": true,
+            "description": "Top 3 melhorias de maior impacto"
+        },
+        "training_recommendation": {
+            "type": "string",
+            "required": true,
+            "description": "Treinamento específico recomendado"
+        },
+        "follow_up_action": {
+            "type": "string",
+            "required": true,
+            "description": "Ação imediata recomendada para o gerente"
+        }
+    },
+    "expected_output_example": {
+        "summary_narrative": "Carlos demonstrou boa abertura e diagnóstico inicial, conduzindo bem as perguntas de qualificação de estilo de vida. No entanto, o atendimento perdeu força na etapa de apresentação: o produto foi apresentado sem ancoragem de valor prévia, o que tornou o cliente suscetível ao choque de preço.\n\nO maior gap foi a ausência completa do fechamento — Carlos não fez nenhuma tentativa de fechar o atendimento, permitindo que o cliente saísse sem compromisso. Para um cliente com intenção média (score 45/100), uma tentativa de fechamento consultivo ('O que falta para você se sentir seguro hoje?') poderia ter mudado o resultado.\n\nOpportunidades de receita perdidas somam R$ 1.200 — DriveSafe (cliente dirige diariamente) e BlueGuard (uso intenso de computador) foram sinais claros que não foram aproveitados.",
+        "compliance_score": 62,
+        "strengths": [
+            "Abertura acolhedora e diagnóstico de necessidades bem conduzido",
+            "Mencionou a Zeiss com contexto histórico (empresa alemã, tradição)",
+            "Captou telefone do cliente no final — ponto positivo"
+        ],
+        "improvements": [
+            {
+                "priority": 1,
+                "area": "Fechamento",
+                "action": "Praticar 3 técnicas de fechamento consultivo — especialmente para clientes racionais que precisam de um empurrão lógico",
+                "impact": "Alta"
+            },
+            {
+                "priority": 2,
+                "area": "Up-sell / Cross-sell",
+                "action": "Treinar detecção de sinais de compra para DriveSafe (dirige) e BlueGuard (computador) — perguntas de qualificação diretas",
+                "impact": "Alta"
+            },
+            {
+                "priority": 3,
+                "area": "Ancoragem de valor",
+                "action": "Apresentar o produto premium ANTES do preço — nunca ao contrário. Use a metodologia 'valor-evidência-preço'",
+                "impact": "Média"
+            }
+        ],
+        "training_recommendation": "Módulo de fechamento consultivo + role-play de detecção de oportunidades de up-sell. Foco: cliente perfil RACIONAL — como usar dados para justificar premium.",
+        "follow_up_action": "Gerente deve acompanhar próximo atendimento de Carlos presencialmente. Verificar se aprendeu a perguntar sobre atividades antes de apresentar produtos."
+    }
+}
